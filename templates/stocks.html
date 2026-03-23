@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Stock Browser — 1.OPTION{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:32px; padding-bottom:64px;">
+
+  <div class="dash-section" style="margin-bottom:0;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px;">
+      <h1 class="section-title" style="margin-bottom:0;">Stock Browser</h1>
+      <span class="badge-live">LIVE</span>
+    </div>
+    <p style="color:var(--text-dim); font-size:13px; margin-bottom:20px;">
+      {% if stocks|length > 0 %}
+        {{ stocks|length }} stocks — click any card for full chart &amp; detail
+      {% else %}
+        Fetching live market data… <span style="color:var(--green);">refresh in ~2 min</span>
+      {% endif %}
+    </p>
+
+    <!-- Search -->
+    <input
+      type="text"
+      id="stockSearch"
+      class="stocks-search"
+      placeholder="🔍  Search ticker, company, or sector…"
+      autocomplete="off"
+    />
+
+    <!-- Sector tabs -->
+    <div class="sector-tabs" id="sectorTabs">
+      <button class="sector-tab active" data-sector="all">All</button>
+      <button class="sector-tab" data-sector="Tech">Tech</button>
+      <button class="sector-tab" data-sector="Finance">Finance</button>
+      <button class="sector-tab" data-sector="Healthcare">Healthcare</button>
+      <button class="sector-tab" data-sector="Energy">Energy</button>
+      <button class="sector-tab" data-sector="Consumer">Consumer</button>
+      <button class="sector-tab" data-sector="Industrial">Industrial</button>
+      <button class="sector-tab" data-sector="Materials">Materials</button>
+      <button class="sector-tab" data-sector="Real Estate">Real Estate</button>
+      <button class="sector-tab" data-sector="Utilities">Utilities</button>
+      <button class="sector-tab" data-sector="ETF">ETF</button>
+    </div>
+
+    <!-- Sort buttons -->
+    <div style="display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap;">
+      <button class="btn btn-ghost sort-btn active" data-sort="gainers" style="font-size:12px; padding:5px 14px;">▲ Top Gainers</button>
+      <button class="btn btn-ghost sort-btn" data-sort="losers"  style="font-size:12px; padding:5px 14px;">▼ Top Losers</button>
+      <button class="btn btn-ghost sort-btn" data-sort="alpha"   style="font-size:12px; padding:5px 14px;">A–Z</button>
+    </div>
+
+    <!-- Stock grid -->
+    <div class="sb-grid" id="stocksGrid">
+      {% for s in stocks %}
+      {% set spark = s.sparkline if s.sparkline else [] %}
+      <a
+        class="sb-card {% if s.positive %}sb-card--up{% else %}sb-card--dn{% endif %}"
+        href="{{ url_for('stock_detail', ticker=s.ticker) }}"
+        data-ticker="{{ s.ticker }}"
+        data-name="{{ s.name|lower }}"
+        data-sector="{{ s.sector }}"
+        data-pct="{{ s.pct_change }}"
+      >
+        <!-- Top row: ticker + badge -->
+        <div class="sb-top">
+          <span class="sb-ticker">{{ s.ticker }}</span>
+          <span class="sb-chg {% if s.positive %}pos{% else %}neg{% endif %}">
+            {% if s.positive %}+{% endif %}{{ "%.2f"|format(s.pct_change) }}%
+          </span>
+        </div>
+
+        <!-- Company name -->
+        {% if s.name %}
+        <div class="sb-name">{{ s.name }}</div>
+        {% endif %}
+
+        <!-- Sector pill -->
+        <div class="sb-sector">{{ s.sector }}</div>
+
+        <!-- Sparkline SVG -->
+        {% if spark|length >= 2 %}
+        <div class="sb-spark-wrap">
+          <svg class="sb-spark" viewBox="0 0 80 30" preserveAspectRatio="none">
+            <polyline
+              fill="none"
+              stroke="{% if s.positive %}#00d4aa{% else %}#ff4757{% endif %}"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              points="{% for v in spark %}{{ loop.index0 * (80 / (spark|length - 1)) | round(1) }},{{ (30 - v * 0.27) | round(1) }} {% endfor %}"
+            />
+          </svg>
+        </div>
+        {% else %}
+        <div class="sb-spark-wrap" style="height:32px;"></div>
+        {% endif %}
+
+        <!-- Price -->
+        <div class="sb-price">${{ "%.2f"|format(s.price) }}</div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <!-- Empty state -->
+    <div id="noResults" style="display:none; text-align:center; padding:64px; color:var(--text-dim);">
+      No stocks match your filter.
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const cards    = Array.from(document.querySelectorAll('.sb-card'));
+  const grid     = document.getElementById('stocksGrid');
+  const noRes    = document.getElementById('noResults');
+  const search   = document.getElementById('stockSearch');
+  const tabs     = document.querySelectorAll('.sector-tab');
+  const sortBtns = document.querySelectorAll('.sort-btn');
+
+  let activeSector = 'all';
+  let activeSort   = 'gainers';
+  let searchVal    = '';
+
+  function applyFilters() {
+    let visible = cards.filter(c => {
+      const ticker = c.dataset.ticker.toLowerCase();
+      const sector = c.dataset.sector.toLowerCase();
+      const name   = (c.dataset.name || '').toLowerCase();
+      const matchSearch = !searchVal || ticker.includes(searchVal) || sector.includes(searchVal) || name.includes(searchVal);
+      const matchSector = activeSector === 'all' || c.dataset.sector === activeSector;
+      return matchSearch && matchSector;
+    });
+
+    if (activeSort === 'gainers') {
+      visible.sort((a, b) => parseFloat(b.dataset.pct) - parseFloat(a.dataset.pct));
+    } else if (activeSort === 'losers') {
+      visible.sort((a, b) => parseFloat(a.dataset.pct) - parseFloat(b.dataset.pct));
+    } else {
+      visible.sort((a, b) => a.dataset.ticker.localeCompare(b.dataset.ticker));
+    }
+
+    cards.forEach(c => { c.style.display = 'none'; });
+    visible.forEach(c => { c.style.display = 'flex'; grid.appendChild(c); });
+    noRes.style.display = visible.length === 0 ? 'block' : 'none';
+  }
+
+  search.addEventListener('input', () => { searchVal = search.value.trim().toLowerCase(); applyFilters(); });
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeSector = tab.dataset.sector;
+      applyFilters();
+    });
+  });
+  sortBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeSort = btn.dataset.sort;
+      applyFilters();
+    });
+  });
+
+  applyFilters();
+
+  // Auto-reload if no stocks loaded yet (cache still warming up)
+  if (cards.length === 0) {
+    setTimeout(() => { window.location.reload(); }, 30000);
+  }
+})();
+</script>
+{% endblock %}

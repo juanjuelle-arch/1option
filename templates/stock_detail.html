@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker }} — 1.OPTION{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:28px; padding-bottom:64px;">
+
+  <!-- Back link -->
+  <a href="{{ url_for('stocks') }}" style="color:var(--text-dim); font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-bottom:20px;">
+    ← Back to Stocks
+  </a>
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <div class="stock-hero">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px;">
+      <span class="stock-hero-ticker">{{ ticker }}</span>
+      {% if detail.sector and detail.sector != 'N/A' %}
+      <span style="background:rgba(0,212,170,0.1); color:#00d4aa; border:1px solid rgba(0,212,170,0.25); border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; letter-spacing:0.06em;">
+        {{ detail.sector }}
+      </span>
+      {% endif %}
+      <span class="badge-live">LIVE</span>
+    </div>
+
+    {% if detail.company != ticker %}
+    <div class="stock-hero-company">{{ detail.company }}</div>
+    {% endif %}
+
+    <div style="display:flex; align-items:baseline; gap:20px; flex-wrap:wrap; margin-top:10px;">
+      {% if detail.price %}
+      <span class="stock-hero-price">${{ "%.2f"|format(detail.price) }}</span>
+      {% endif %}
+      {% if detail.pct_change is not none %}
+      <span style="font-size:24px; font-weight:800; font-family:'JetBrains Mono',monospace;" class="{% if detail.positive %}pos{% else %}neg{% endif %}">
+        {% if detail.positive %}▲ +{% else %}▼ {% endif %}{{ "%.2f"|format(detail.pct_change) }}%
+      </span>
+      {% endif %}
+    </div>
+
+    <div style="color:var(--text-dim); font-size:12px; margin-top:8px;">
+      Updated {{ detail.updated_at }}
+      {% if detail.avg_volume %}
+      &nbsp;·&nbsp; Avg Vol {{ "{:,.0f}".format(detail.avg_volume / 1000000) if detail.avg_volume >= 1000000 else "{:,.0f}K".format(detail.avg_volume / 1000) }}{{ "M" if detail.avg_volume >= 1000000 else "" }}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Chart ─────────────────────────────────────────────────────────── -->
+  <div class="dash-section" style="margin-top:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+      <h2 class="section-title" style="margin-bottom:0;">Price Chart</h2>
+      <div class="tf-buttons">
+        <button class="tf-btn" data-period="1d">1D</button>
+        <button class="tf-btn" data-period="5d">5D</button>
+        <button class="tf-btn active" data-period="1mo">1M</button>
+        <button class="tf-btn" data-period="3mo">3M</button>
+        <button class="tf-btn" data-period="6mo">6M</button>
+        <button class="tf-btn" data-period="1y">1Y</button>
+        <button class="tf-btn" data-period="5y">5Y</button>
+      </div>
+    </div>
+    <div class="chart-container">
+      <div id="chartContainer" style="height:480px; width:100%;"></div>
+    </div>
+  </div>
+
+  <!-- ── Stats grid ─────────────────────────────────────────────────────── -->
+  <div class="dash-section" style="margin-top:20px;">
+    <h2 class="section-title">Key Statistics</h2>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">Market Cap</div>
+        <div class="stat-box-value">
+          {% if detail.market_cap %}
+            {% set mc = detail.market_cap %}
+            {% if mc >= 1000000000000 %}${{ "%.2f"|format(mc/1000000000000) }}T
+            {% elif mc >= 1000000000 %}${{ "%.2f"|format(mc/1000000000) }}B
+            {% elif mc >= 1000000 %}${{ "%.1f"|format(mc/1000000) }}M
+            {% else %}${{ mc }}
+            {% endif %}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">P/E Ratio</div>
+        <div class="stat-box-value">
+          {% if detail.pe_ratio %}{{ "%.1f"|format(detail.pe_ratio) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">52W High</div>
+        <div class="stat-box-value">
+          {% if detail.week52_high %}${{ "%.2f"|format(detail.week52_high) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">52W Low</div>
+        <div class="stat-box-value">
+          {% if detail.week52_low %}${{ "%.2f"|format(detail.week52_low) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">Avg Volume</div>
+        <div class="stat-box-value">
+          {% if detail.avg_volume %}
+            {% set av = detail.avg_volume %}
+            {% if av >= 1000000 %}{{ "%.1f"|format(av/1000000) }}M
+            {% elif av >= 1000 %}{{ "%.0f"|format(av/1000) }}K
+            {% else %}{{ av }}
+            {% endif %}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">Beta</div>
+        <div class="stat-box-value">
+          {% if detail.beta %}{{ "%.2f"|format(detail.beta) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      {% if detail.finviz %}
+      <div class="stat-box">
+        <div class="stat-box-label">Short Float</div>
+        <div class="stat-box-value">
+          {% if detail.finviz.short_float %}{{ detail.finviz.short_float }}%{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">Analyst Target</div>
+        <div class="stat-box-value">
+          {% if detail.finviz.target_price %}${{ "%.2f"|format(detail.finviz.target_price) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Signals ────────────────────────────────────────────────────────── -->
+  {% if detail.signals %}
+  <div class="dash-section" style="margin-top:20px;">
+    <h2 class="section-title">Technical Signals</h2>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
+      {% set sig = detail.signals %}
+      <!-- RSI -->
+      <span class="signal-pill
+        {% if sig.rsi_signal == 'Oversold' %}signal-bullish
+        {% elif sig.rsi_signal == 'Overbought' %}signal-bearish
+        {% else %}signal-neutral{% endif %}">
+        RSI {{ "%.0f"|format(sig.rsi) if sig.rsi else '—' }} · {{ sig.rsi_signal }}
+      </span>
+      <!-- MACD -->
+      <span class="signal-pill
+        {% if 'Bullish' in sig.macd_signal %}signal-bullish
+        {% elif 'Bearish' in sig.macd_signal %}signal-bearish
+        {% else %}signal-neutral{% endif %}">
+        MACD · {{ sig.macd_signal }}
+      </span>
+      <!-- MA -->
+      <span class="signal-pill
+        {% if 'Golden' in sig.ma_signal %}signal-bullish
+        {% elif 'Death' in sig.ma_signal %}signal-bearish
+        {% else %}signal-neutral{% endif %}">
+        MA · {{ sig.ma_signal }}
+      </span>
+      <!-- Finviz analyst -->
+      {% if detail.finviz and detail.finviz.analyst_recom %}
+      <span class="signal-pill
+        {% if detail.finviz.analyst_recom <= 2.0 %}signal-bullish
+        {% elif detail.finviz.analyst_recom >= 3.5 %}signal-bearish
+        {% else %}signal-neutral{% endif %}">
+        Analyst {{ "%.1f"|format(detail.finviz.analyst_recom) }}/5
+      </span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Options Flow ───────────────────────────────────────────────────── -->
+  {% if detail.options %}
+  {% set opts = detail.options %}
+  <div class="dash-section" style="margin-top:20px;">
+    <h2 class="section-title">Options Flow</h2>
+
+    <!-- Calls/Puts totals + ratio bar -->
+    <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-bottom:16px;">
+      <div>
+        <span class="pos" style="font-size:22px; font-weight:800; font-family:'JetBrains Mono',monospace;">
+          {{ "{:,}".format(opts.total_calls) }}
+        </span>
+        <span style="color:var(--text-dim); font-size:12px; margin-left:4px;">calls</span>
+      </div>
+      <div>
+        <span class="neg" style="font-size:22px; font-weight:800; font-family:'JetBrains Mono',monospace;">
+          {{ "{:,}".format(opts.total_puts) }}
+        </span>
+        <span style="color:var(--text-dim); font-size:12px; margin-left:4px;">puts</span>
+      </div>
+      {% if opts.cp_ratio %}
+      <div style="color:var(--text-dim); font-size:13px;">
+        P/C Ratio: <strong style="color:var(--text);">{{ opts.cp_ratio }}</strong>
+        {% if opts.cp_ratio < 0.7 %}<span class="pos"> · Bullish</span>
+        {% elif opts.cp_ratio > 1.2 %}<span class="neg"> · Bearish</span>
+        {% else %}<span style="color:var(--yellow);"> · Neutral</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- P/C ratio bar -->
+    {% if opts.total_calls + opts.total_puts > 0 %}
+    {% set call_pct = (opts.total_calls / (opts.total_calls + opts.total_puts) * 100)|round(1) %}
+    <div class="cp-bar" style="margin-bottom:20px;">
+      <div class="cp-calls-fill" style="width:{{ call_pct }}%;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-top:-12px; margin-bottom:20px;">
+      <span class="pos">Calls {{ call_pct }}%</span>
+      <span class="neg">Puts {{ (100 - call_pct)|round(1) }}%</span>
+    </div>
+    {% endif %}
+
+    <!-- Options tabs: Calls / Puts -->
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button class="tf-btn active" id="tabCalls" onclick="showTab('calls')">Top Calls</button>
+      <button class="tf-btn" id="tabPuts" onclick="showTab('puts')">Top Puts</button>
+    </div>
+
+    <!-- Calls table -->
+    <div id="tblCalls">
+      {% if opts.top_calls %}
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--border);">
+            <th style="padding:6px 10px;">Strike</th>
+            <th style="padding:6px 10px;">Expiry</th>
+            <th style="padding:6px 10px;">Volume</th>
+            <th style="padding:6px 10px;">OI</th>
+            <th style="padding:6px 10px;">IV</th>
+            <th style="padding:6px 10px;">Last</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in opts.top_calls %}
+          <tr style="border-bottom:1px solid var(--border)22;">
+            <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace; color:var(--green);">${{ c.strike }}</td>
+            <td style="padding:8px 10px; color:var(--text-dim);">{{ c.expiry }}</td>
+            <td style="padding:8px 10px; font-weight:700;">{{ "{:,}".format(c.volume) }}</td>
+            <td style="padding:8px 10px; color:var(--text-dim);">{{ "{:,}".format(c.open_interest) }}</td>
+            <td style="padding:8px 10px; color:var(--yellow);">{{ c.iv }}%</td>
+            <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace;">${{ c.last_price }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--text-dim);">No calls data available.</p>
+      {% endif %}
+    </div>
+
+    <!-- Puts table -->
+    <div id="tblPuts" style="display:none;">
+      {% if opts.top_puts %}
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--border);">
+            <th style="padding:6px 10px;">Strike</th>
+            <th style="padding:6px 10px;">Expiry</th>
+            <th style="padding:6px 10px;">Volume</th>
+            <th style="padding:6px 10px;">OI</th>
+            <th style="padding:6px 10px;">IV</th>
+            <th style="padding:6px 10px;">Last</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in opts.top_puts %}
+          <tr style="border-bottom:1px solid var(--border)22;">
+            <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace; color:var(--red);">${{ p.strike }}</td>
+            <td style="padding:8px 10px; color:var(--text-dim);">{{ p.expiry }}</td>
+            <td style="padding:8px 10px; font-weight:700;">{{ "{:,}".format(p.volume) }}</td>
+            <td style="padding:8px 10px; color:var(--text-dim);">{{ "{:,}".format(p.open_interest) }}</td>
+            <td style="padding:8px 10px; color:var(--yellow);">{{ p.iv }}%</td>
+            <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace;">${{ p.last_price }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--text-dim);">No puts data available.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── News ──────────────────────────────────────────────────────────── -->
+  {% if news %}
+  <div class="dash-section" style="margin-top:20px;">
+    <h2 class="section-title">Recent News</h2>
+    <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+      {% for article in news %}
+      <a href="{{ article.link }}" target="_blank" rel="noopener"
+         style="display:block; padding:14px 16px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; text-decoration:none; transition:border-color 0.2s;"
+         onmouseover="this.style.borderColor='var(--accent,#00d4aa)'"
+         onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:13px; font-weight:500; color:var(--text); line-height:1.4; margin-bottom:4px;">
+          {{ article.title }}
+        </div>
+        <div style="font-size:11px; color:var(--text-dim);">
+          {{ article.source }} · {{ article.published_str }}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- TradingView Lightweight Charts v4 (stable API) -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function() {
+  const TICKER = "{{ ticker }}";
+
+  // ── Create chart ───────────────────────────────────────────────────────
+  const chartEl = document.getElementById('chartContainer');
+  const chart = LightweightCharts.createChart(chartEl, {
+    layout: { background: { color: '#0d0d1a' }, textColor: '#a0a0c0' },
+    grid: {
+      vertLines: { color: 'rgba(255,255,255,0.04)' },
+      horzLines: { color: 'rgba(255,255,255,0.04)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(0,212,170,0.4)', labelBackgroundColor: '#00d4aa' },
+      horzLine: { color: 'rgba(0,212,170,0.4)', labelBackgroundColor: '#00d4aa' },
+    },
+    rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)', scaleMargins: { top: 0.1, bottom: 0.2 } },
+    timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true, secondsVisible: false },
+    width: chartEl.offsetWidth,
+    height: 480,
+  });
+
+  const candleSeries = chart.addCandlestickSeries({
+    upColor:        '#00d4aa',
+    downColor:      '#ff4757',
+    borderUpColor:  '#00d4aa',
+    borderDownColor:'#ff4757',
+    wickUpColor:    '#00d4aa',
+    wickDownColor:  '#ff4757',
+  });
+
+  const volumeSeries = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+  chart.priceScale('volume').applyOptions({
+    scaleMargins: { top: 0.82, bottom: 0 },
+  });
+
+  // ── Load chart data ────────────────────────────────────────────────────
+  async function loadChart(period) {
+    try {
+      const res = await fetch(`/api/stocks/${TICKER}/chart?period=${period}`);
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn('No chart data for', TICKER, period);
+        return;
+      }
+      // Sort by time ascending (handles both string dates and unix timestamps)
+      data.sort((a, b) => {
+        if (typeof a.time === 'string') return a.time.localeCompare(b.time);
+        return a.time - b.time;
+      });
+      candleSeries.setData(data);
+      // Volume bars
+      const volData = data.filter(d => d.volume != null).map(d => ({
+        time: d.time,
+        value: d.volume,
+        color: d.close >= d.open ? 'rgba(0,212,170,0.35)' : 'rgba(255,71,87,0.35)',
+      }));
+      volumeSeries.setData(volData);
+      chart.timeScale().fitContent();
+    } catch (e) {
+      console.error('Chart load error:', e);
+    }
+  }
+
+  // ── Timeframe buttons ──────────────────────────────────────────────────
+  document.querySelectorAll('.tf-btn[data-period]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tf-btn[data-period]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadChart(btn.dataset.period);
+    });
+  });
+
+  // ── Responsive resize ──────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    chart.applyOptions({ width: chartEl.offsetWidth, height: 480 });
+  });
+
+  // Initial load
+  loadChart('1mo');
+
+  // ── Options tab toggle ─────────────────────────────────────────────────
+  window.showTab = function(tab) {
+    document.getElementById('tblCalls').style.display = tab === 'calls' ? 'block' : 'none';
+    document.getElementById('tblPuts').style.display  = tab === 'puts'  ? 'block' : 'none';
+    document.getElementById('tabCalls').classList.toggle('active', tab === 'calls');
+    document.getElementById('tabPuts').classList.toggle('active',  tab === 'puts');
+  };
+})();
+</script>
+{% endblock %}

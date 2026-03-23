@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login — 1.OPTION{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">1.OPTION</div>
+    <h1 class="auth-title">Welcome back</h1>
+    <p class="auth-sub">Log in to access your dashboard</p>
+
+    <form method="POST" class="auth-form">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" required placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" required placeholder="••••••••" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Log In</button>
+    </form>
+
+    <p class="auth-switch">Don't have an account? <a href="{{ url_for('signup') }}">Sign up free</a></p>
+  </div>
+</div>
+{% endblock %}

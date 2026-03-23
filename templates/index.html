@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}1.OPTION — Top Stock Picks, Options Flow & Market Intelligence{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">🔴 LIVE &nbsp;·&nbsp; Data updated every 2 minutes</div>
+    <h1 class="hero-title">Top Picks. Real Data.<br><span class="gradient-text">Every Week.</span></h1>
+    <p class="hero-sub">Real-time top stock picks, calls & puts flow, RSI/MACD signals, earnings alerts, and market sentiment — all in one dashboard.</p>
+    <div class="hero-cta">
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Get Pro Access — $19.99/mo</a>
+      <a href="{{ url_for('pricing') }}" class="btn btn-ghost btn-lg">See Plans →</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><span class="stat-num">10</span><span class="stat-label">Picks / Week</span></div>
+      <div class="hero-stat"><span class="stat-num">Live</span><span class="stat-label">Options Flow</span></div>
+      <div class="hero-stat"><span class="stat-num">2min</span><span class="stat-label">Refresh Rate</span></div>
+      <div class="hero-stat"><span class="stat-num">24+</span><span class="stat-label">News Sources</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Sentiment Strip -->
+{% if sentiment %}
+<section class="sentiment-strip">
+  <div class="container">
+    <div class="sentiment-items">
+      <div class="sentiment-item">
+        <span class="sentiment-label">Fear & Greed</span>
+        <span class="sentiment-value" style="color: {{ sentiment.fear_greed_color }}">{{ sentiment.fear_greed_label }} ({{ sentiment.fear_greed_score }})</span>
+      </div>
+      <div class="sentiment-item">
+        <span class="sentiment-label">VIX</span>
+        <span class="sentiment-value {% if sentiment.vix > 25 %}neg{% else %}pos{% endif %}">{{ sentiment.vix }}</span>
+      </div>
+      {% for sector in sentiment.sectors[:5] %}
+      <div class="sentiment-item">
+        <span class="sentiment-label">{{ sector.name }}</span>
+        <span class="sentiment-value {% if sector.positive %}pos{% else %}neg{% endif %}">
+          {% if sector.positive %}+{% endif %}{{ sector.pct }}%
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Free Preview: Top 3 Picks -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div>
+        <h2>This Week's Top Picks <span class="badge-live">LIVE</span></h2>
+        <p class="section-sub">Scored by momentum · technicals · options flow · sentiment</p>
+      </div>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary">Unlock All 10 →</a>
+    </div>
+
+    <div class="picks-grid">
+      <!-- 3 free visible picks -->
+      {% for pick in picks %}
+      <div class="pick-card pick-card--full">
+        <div class="pick-top-row">
+          <div class="pick-id">
+            <span class="pick-rank">#{{ loop.index }}</span>
+            <span class="pick-ticker">{{ pick.ticker }}</span>
+          </div>
+          <div class="pick-score-badge">{{ pick.score }}<span class="score-denom">/100</span></div>
+        </div>
+        <div class="pick-meta">{{ pick.company[:30] }}</div>
+        <div class="pick-price-row">
+          <span class="price-big">${{ pick.price }}</span>
+          <span class="price-chg {% if pick.pct_gain >= 0 %}pos{% else %}neg{% endif %}">
+            {% if pick.pct_gain >= 0 %}+{% endif %}{{ pick.pct_gain }}%
+          </span>
+        </div>
+        <div class="signal-pills">
+          <span class="signal-pill badge-sentiment-{{ pick.sentiment.lower() }}">{{ pick.sentiment }}</span>
+          <span class="signal-pill pill-dim">RSI {{ pick.rsi }}</span>
+          {% if pick.has_earnings %}<span class="signal-pill pill-neutral">📅 Earnings {{ pick.earnings_date }}</span>{% endif %}
+        </div>
+        <div class="cp-flow">
+          {% if pick.total_calls and pick.total_puts %}
+          {% set tot = pick.total_calls + pick.total_puts %}
+          {% set cpct = (pick.total_calls / tot * 100) | round | int %}
+          <div class="cp-bar">
+            <div class="cp-calls-fill" style="width:{{ cpct }}%" data-pct="{{ cpct }}"></div>
+          </div>
+          <div class="cp-legend">
+            <span class="pos">▲ {{ "{:,}".format(pick.total_calls) }}</span>
+            <span class="neg">{{ "{:,}".format(pick.total_puts) }} ▼</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+
+      <!-- 7 locked picks -->
+      {% for i in range(3, 10) %}
+      <div class="pick-card pick-card--locked">
+        <div class="lock-overlay">
+          <span class="lock-icon">🔒</span>
+          <span class="lock-text">Pick #{{ i + 1 }} — Pro Only</span>
+          <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Subscribe $19.99/mo</a>
+        </div>
+        <div class="pick-top-row blurred">
+          <span class="pick-ticker">████</span>
+          <div class="pick-score-badge">--</div>
+        </div>
+        <div class="blurred" style="height:90px;"></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Free Preview: News -->
+<section class="section section-dark">
+  <div class="container">
+    <div class="section-header">
+      <div>
+        <h2>Market News <span class="badge-live">LIVE</span></h2>
+        <p class="section-sub">Yahoo Finance · Reuters · MarketWatch · CNBC · Bloomberg</p>
+      </div>
+      <a href="{{ url_for('signup') }}" class="btn btn-ghost">See All 24+ →</a>
+    </div>
+    <div class="news-grid">
+      {% for article in news %}
+      <a href="{{ article.link }}" target="_blank" rel="noopener" class="news-card">
+        <span class="news-source">{{ article.source }}</span>
+        <h3 class="news-title">{{ article.title }}</h3>
+        <span class="news-time">{{ article.published_str }}</span>
+      </a>
+      {% endfor %}
+      {% for i in range(3, 7) %}
+      <div class="news-card news-card--locked">
+        <span class="news-source" style="color:var(--text-dim)">Premium</span>
+        <div class="blurred" style="height:50px;background:#1a1a2e;border-radius:4px;margin:6px 0;"></div>
+        <div style="font-size:11px;color:var(--text-dim)">🔒 Pro subscribers only</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section">
+  <div class="container">
+    <h2 class="text-center" style="margin-bottom:8px;">Everything a Serious Trader Needs</h2>
+    <p class="text-center section-sub" style="margin-bottom:40px;">Pro plan — $19.99/month. Cancel anytime.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3>Top 10 Weekly Picks</h3>
+        <p>Composite-scored by momentum, volume surge, RSI, MACD, and options flow. Updated every 2 minutes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Live Options Flow</h3>
+        <p>See call/put volume, ratios, and top contracts per stock. Know what smart money is betting on.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🧠</div>
+        <h3>Technical Signals</h3>
+        <p>RSI, MACD, Golden Cross / Death Cross — auto-computed per stock, every refresh.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Market Sentiment</h3>
+        <p>Live Fear & Greed gauge, VIX tracking, sector performance heatmap.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <h3>Earnings Calendar</h3>
+        <p>This week's major earnings with EPS estimates and options flow direction per company.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📰</div>
+        <h3>24+ News Sources</h3>
+        <p>Yahoo Finance, Reuters, MarketWatch, CNBC, Bloomberg — aggregated and sorted by recency.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Free vs Pro -->
+<section class="section section-dark">
+  <div class="container text-center">
+    <h2 style="margin-bottom:8px;">Free vs. Pro</h2>
+    <p class="section-sub" style="margin-bottom:40px;">Start free, upgrade when you're ready.</p>
+    <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;">
+      <div class="pricing-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0<span class="plan-period">/month</span></div>
+        <ul class="plan-features" style="text-align:left">
+          <li>✓ Live market ticker bar</li>
+          <li>✓ Top 3 picks (preview)</li>
+          <li>✓ 3 news headlines</li>
+          <li>✓ Fear & Greed strip</li>
+          <li class="locked">✗ Full top 10 picks</li>
+          <li class="locked">✗ Calls & puts data</li>
+          <li class="locked">✗ Earnings calendar</li>
+          <li class="locked">✗ Technical signals</li>
+        </ul>
+        <a href="{{ url_for('signup') }}" class="btn btn-ghost btn-full">Sign Up Free</a>
+      </div>
+      <div class="pricing-card pricing-card--featured">
+        <div class="plan-badge">BEST VALUE</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$19.99<span class="plan-period">/month</span></div>
+        <ul class="plan-features" style="text-align:left">
+          <li>✓ <strong>All 10 weekly picks</strong></li>
+          <li>✓ <strong>Full calls & puts flow</strong></li>
+          <li>✓ <strong>RSI · MACD · MA signals</strong></li>
+          <li>✓ <strong>Live Fear & Greed gauge</strong></li>
+          <li>✓ <strong>Earnings calendar</strong></li>
+          <li>✓ <strong>Sector heatmap</strong></li>
+          <li>✓ <strong>24+ news sources</strong></li>
+          <li>✓ <strong>2-minute data refresh</strong></li>
+        </ul>
+        <a href="{{ url_for('signup') }}" class="btn btn-primary btn-full">Get Pro Access →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-banner">
+  <div class="container text-center">
+    <h2>Start trading smarter today.</h2>
+    <p>1.OPTION Pro — $19.99/month. Follow us on Instagram <strong>@1.optionn</strong></p>
+    <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Get Pro Access →</a>
+  </div>
+</section>
+
+{% endblock %}

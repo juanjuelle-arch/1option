@@ -1,0 +1,14 @@
+flask
+flask-login
+flask-sqlalchemy
+yfinance
+feedparser
+requests
+beautifulsoup4
+apscheduler
+stripe
+python-dotenv
+werkzeug
+gunicorn
+numpy
+pandas

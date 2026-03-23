@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Pricing — 1.OPTION{% endblock %}
+{% block content %}
+
+<div class="pricing-page">
+  <div class="container">
+    <div class="pricing-header text-center">
+      <h1>Simple, Transparent Pricing</h1>
+      <p>Everything you need to trade smarter. Cancel anytime.</p>
+    </div>
+
+    <div class="pricing-cards">
+
+      <!-- Free -->
+      <div class="pricing-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0<span class="plan-period">/month</span></div>
+        <ul class="plan-features">
+          <li>✓ Live market overview bar</li>
+          <li>✓ Top 3 stock picks (preview)</li>
+          <li>✓ 3 news headlines</li>
+          <li>✓ Fear & Greed indicator</li>
+          <li class="locked">✗ Full top 10 picks</li>
+          <li class="locked">✗ Calls & puts data</li>
+          <li class="locked">✗ Technical signals (RSI, MACD)</li>
+          <li class="locked">✗ Earnings calendar</li>
+          <li class="locked">✗ Full news feed</li>
+          <li class="locked">✗ Sector heatmap</li>
+        </ul>
+        <a href="{{ url_for('signup') }}" class="btn btn-ghost btn-full">Get Started Free</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card pricing-card--featured">
+        <div class="plan-badge">MOST POPULAR</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$19.99<span class="plan-period">/month</span></div>
+        <ul class="plan-features">
+          <li>✓ Everything in Free</li>
+          <li>✓ <strong>Top 10 weekly stock picks</strong></li>
+          <li>✓ <strong>Full calls & puts flow data</strong></li>
+          <li>✓ <strong>RSI, MACD, MA signals per stock</strong></li>
+          <li>✓ <strong>Market sentiment dashboard</strong></li>
+          <li>✓ <strong>Earnings calendar (this week)</strong></li>
+          <li>✓ <strong>24+ news sources, live</strong></li>
+          <li>✓ <strong>Sector performance heatmap</strong></li>
+          <li>✓ <strong>Auto-refresh every 60 seconds</strong></li>
+          <li>✓ <strong>Call/Put ratio per stock</strong></li>
+        </ul>
+        {% if current_user.is_authenticated %}
+          {% if current_user.is_subscribed %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-full">Go to Dashboard →</a>
+          {% else %}
+            <form action="{{ url_for('create_checkout_session') }}" method="POST">
+              <button type="submit" class="btn btn-primary btn-full">Subscribe Now →</button>
+            </form>
+          {% endif %}
+        {% else %}
+          <a href="{{ url_for('signup') }}" class="btn btn-primary btn-full">Start Free Trial →</a>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <div class="pricing-faq">
+      <h2>Frequently Asked Questions</h2>
+      <div class="faq-grid">
+        <div class="faq-item">
+          <h3>Where does the data come from?</h3>
+          <p>All data is pulled live from Yahoo Finance (stocks, options, technicals), RSS news feeds from major financial outlets, and Finviz for analyst signals.</p>
+        </div>
+        <div class="faq-item">
+          <h3>How often does it refresh?</h3>
+          <p>The dashboard auto-refreshes every 60 seconds. Backend data is updated every 5 minutes during market hours.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Can I cancel anytime?</h3>
+          <p>Yes. Cancel from your account at any time. You keep access until the end of your billing period.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Is this financial advice?</h3>
+          <p>No. 1.OPTION is an informational tool for research purposes only. Always do your own due diligence before investing.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
