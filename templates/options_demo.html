@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Options Layout Demo — 1.OPTION{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:28px; padding-bottom:64px;">
+  <a href="{{ url_for('dashboard') }}" style="color:var(--text-dim); font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-bottom:20px;">
+    ← Back to Dashboard
+  </a>
+  <h1 style="font-size:24px; margin-bottom:8px;">Pick Your Favorite Layout</h1>
+  <p style="color:var(--text-dim); margin-bottom:32px;">Scroll down to see all 4 options. Tell me which number you like best.</p>
+
+  <!-- ═══════════════ OPTION 1: CARDS ═══════════════ -->
+  <div class="dash-section" style="margin-bottom:40px;">
+    <h2 class="section-title" style="margin-bottom:4px;">Option 1 — Cards</h2>
+    <p style="color:var(--text-dim); font-size:12px; margin-bottom:16px;">Each contract as its own card with all info visible at a glance</p>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">
+      <!-- Card 1 -->
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--green);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:15px;">AAPL</span>
+          <span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">CALL</span>
+        </div>
+        <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green); margin-bottom:6px;">$4.50</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px;">per share</div>
+        <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+          <div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Contract</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">$450</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+            <div style="font-size:13px;">Apr 18</div>
+          </div>
+        </div>
+      </div>
+      <!-- Card 2 -->
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--green);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:15px;">NVDA</span>
+          <span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">CALL</span>
+        </div>
+        <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green); margin-bottom:6px;">$12.35</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px;">per share</div>
+        <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+          <div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Contract</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">$1,235</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+            <div style="font-size:13px;">Apr 25</div>
+          </div>
+        </div>
+      </div>
+      <!-- Card 3 -->
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--red);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:15px;">TSLA</span>
+          <span style="background:rgba(255,51,102,0.15); color:var(--red); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">PUT</span>
+        </div>
+        <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--red); margin-bottom:6px;">$8.20</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px;">per share</div>
+        <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+          <div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Contract</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">$820</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+            <div style="font-size:13px;">May 02</div>
+          </div>
+        </div>
+      </div>
+      <!-- Card 4 -->
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--green);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:15px;">AMD</span>
+          <span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">CALL</span>
+        </div>
+        <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green); margin-bottom:6px;">$2.80</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px;">per share</div>
+        <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+          <div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Contract</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">$280</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+            <div style="font-size:13px;">Apr 18</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ OPTION 2: HORIZONTAL STRIPS ═══════════════ -->
+  <div class="dash-section" style="margin-bottom:40px;">
+    <h2 class="section-title" style="margin-bottom:4px;">Option 2 — Horizontal Strips</h2>
+    <p style="color:var(--text-dim); font-size:12px; margin-bottom:16px;">Clean rows with all key info in one line, easy to scan</p>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">AAPL</span>
+          <span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">CALL</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Price</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px; color:var(--green);">$4.50</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow);">$450</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Expires</div>
+          <div style="font-size:13px;">Apr 18</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Volume</div>
+          <div style="font-size:13px;">45,230</div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">NVDA</span>
+          <span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">CALL</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Price</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px; color:var(--green);">$12.35</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow);">$1,235</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Expires</div>
+          <div style="font-size:13px;">Apr 25</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Volume</div>
+          <div style="font-size:13px;">38,100</div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:120px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">TSLA</span>
+          <span style="background:rgba(255,51,102,0.15); color:var(--red); padding:3px 10px; border-radius:12px; font-size:10px; font-weight:700;">PUT</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Price</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px; color:var(--red);">$8.20</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow);">$820</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Expires</div>
+          <div style="font-size:13px;">May 02</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase;">Volume</div>
+          <div style="font-size:13px;">22,450</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ OPTION 3: BIG PRICE FOCUS ═══════════════ -->
+  <div class="dash-section" style="margin-bottom:40px;">
+    <h2 class="section-title" style="margin-bottom:4px;">Option 3 — Big Price Focus</h2>
+    <p style="color:var(--text-dim); font-size:12px; margin-bottom:16px;">Price is the hero, everything else secondary. Bold and clean.</p>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:18px 20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+        <div style="min-width:80px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px;">AAPL</span>
+        </div>
+        <span style="background:rgba(0,212,170,0.2); color:var(--green); padding:5px 14px; border-radius:20px; font-size:12px; font-weight:800; letter-spacing:0.05em;">CALL</span>
+        <div style="flex:1; text-align:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:900; font-size:28px; color:var(--green);">$4.50</span>
+          <span style="color:var(--text-dim); font-size:11px; margin-left:6px;">/share</span>
+        </div>
+        <div style="background:var(--bg); padding:8px 14px; border-radius:8px; text-align:center;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:16px;">$450</div>
+        </div>
+        <div style="text-align:right; min-width:70px;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Exp</div>
+          <div style="font-size:14px; font-weight:600;">Apr 18</div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:18px 20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+        <div style="min-width:80px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px;">NVDA</span>
+        </div>
+        <span style="background:rgba(0,212,170,0.2); color:var(--green); padding:5px 14px; border-radius:20px; font-size:12px; font-weight:800; letter-spacing:0.05em;">CALL</span>
+        <div style="flex:1; text-align:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:900; font-size:28px; color:var(--green);">$12.35</span>
+          <span style="color:var(--text-dim); font-size:11px; margin-left:6px;">/share</span>
+        </div>
+        <div style="background:var(--bg); padding:8px 14px; border-radius:8px; text-align:center;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:16px;">$1,235</div>
+        </div>
+        <div style="text-align:right; min-width:70px;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Exp</div>
+          <div style="font-size:14px; font-weight:600;">Apr 25</div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:10px; padding:18px 20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+        <div style="min-width:80px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px;">TSLA</span>
+        </div>
+        <span style="background:rgba(255,51,102,0.2); color:var(--red); padding:5px 14px; border-radius:20px; font-size:12px; font-weight:800; letter-spacing:0.05em;">PUT</span>
+        <div style="flex:1; text-align:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:900; font-size:28px; color:var(--red);">$8.20</span>
+          <span style="color:var(--text-dim); font-size:11px; margin-left:6px;">/share</span>
+        </div>
+        <div style="background:var(--bg); padding:8px 14px; border-radius:8px; text-align:center;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Contract</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:16px;">$820</div>
+        </div>
+        <div style="text-align:right; min-width:70px;">
+          <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">Exp</div>
+          <div style="font-size:14px; font-weight:600;">May 02</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ OPTION 4: COMPACT MINIMAL ═══════════════ -->
+  <div class="dash-section" style="margin-bottom:40px;">
+    <h2 class="section-title" style="margin-bottom:4px;">Option 4 — Compact Minimal</h2>
+    <p style="color:var(--text-dim); font-size:12px; margin-bottom:16px;">Ultra-clean, no borders. Just the essentials with subtle separators.</p>
+
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; overflow:hidden;">
+      <div style="padding:14px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block;"></span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px;">AAPL</span>
+          <span style="color:var(--text-dim); font-size:11px;">Call</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; color:var(--green);">$4.50</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:var(--yellow); font-size:13px;">$450</span>
+          <span style="color:var(--text-dim); font-size:12px; min-width:55px; text-align:right;">Apr 18</span>
+        </div>
+      </div>
+
+      <div style="padding:14px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block;"></span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px;">NVDA</span>
+          <span style="color:var(--text-dim); font-size:11px;">Call</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; color:var(--green);">$12.35</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:var(--yellow); font-size:13px;">$1,235</span>
+          <span style="color:var(--text-dim); font-size:12px; min-width:55px; text-align:right;">Apr 25</span>
+        </div>
+      </div>
+
+      <div style="padding:14px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px;">TSLA</span>
+          <span style="color:var(--text-dim); font-size:11px;">Put</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; color:var(--red);">$8.20</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:var(--yellow); font-size:13px;">$820</span>
+          <span style="color:var(--text-dim); font-size:12px; min-width:55px; text-align:right;">May 02</span>
+        </div>
+      </div>
+
+      <div style="padding:14px 20px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block;"></span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px;">AMD</span>
+          <span style="color:var(--text-dim); font-size:11px;">Call</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; color:var(--green);">$2.80</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:var(--yellow); font-size:13px;">$280</span>
+          <span style="color:var(--text-dim); font-size:12px; min-width:55px; text-align:right;">Apr 18</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

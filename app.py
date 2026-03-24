@@ -194,6 +194,12 @@ def logout():
     logout_user()
     return redirect(url_for("index"))
 
+# ─── Options Layout Demo (temporary) ─────────────────────────────────────────
+@app.route("/options-demo")
+@login_required
+def options_demo():
+    return render_template("options_demo.html")
+
 # ─── Paid Dashboard ──────────────────────────────────────────────────────────
 
 @app.route("/dashboard")
