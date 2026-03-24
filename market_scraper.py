@@ -482,7 +482,432 @@ def get_earnings_whispers(ticker):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 7. MASTER AGGREGATOR — Consolidate all sources into one profile
+# 7. CNN Fear & Greed Index (market-wide sentiment gauge)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_fear_greed_index():
+    """
+    Fetch CNN Fear & Greed Index score (0-100).
+    0 = Extreme Fear, 100 = Extreme Greed.
+    Cached for 30 minutes (market-wide, not per ticker).
+    """
+    cached = _cached("fear_greed", ttl=1800)
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        r = requests.get(url, headers={
+            **HEADERS,
+            "Accept": "application/json",
+        }, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            fg = data.get("fear_and_greed", {})
+            score = fg.get("score")
+            rating = fg.get("rating")
+            if score is not None:
+                result["fg_score"] = round(float(score), 1)
+            if rating:
+                result["fg_rating"] = rating
+            # Also grab previous close for trend
+            prev = fg.get("previous_close")
+            if prev is not None:
+                result["fg_previous"] = round(float(prev), 1)
+    except Exception as e:
+        logger.debug(f"CNN Fear & Greed: {e}")
+
+    _set_cache("fear_greed", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 8. OpenInsider — Recent insider buys/sells
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_insider_trades(ticker):
+    """
+    Scrape OpenInsider for insider buys/sells in the last 30 days.
+    Returns net sentiment based on insider transaction patterns.
+    """
+    cached = _cached(f"insider_{ticker}")
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        url = (
+            f"http://openinsider.com/screener?s={ticker}&o=&pl=&ph=&ll=&lh="
+            f"&fd=30&fdr=&td=&tdr=&feession=&lacession=&session="
+        )
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            table = soup.find("table", class_="tinytable")
+            if table:
+                rows = table.find_all("tr")[1:]  # skip header
+                buy_count = 0
+                sell_count = 0
+                total_bought = 0.0
+                total_sold = 0.0
+                for row in rows:
+                    cells = row.find_all("td")
+                    if len(cells) >= 10:
+                        trade_type = cells[4].get_text(strip=True).lower() if len(cells) > 4 else ""
+                        # Value column (typically column index 8 or 9)
+                        value_text = cells[9].get_text(strip=True) if len(cells) > 9 else ""
+                        value = 0.0
+                        try:
+                            value = float(value_text.replace("$", "").replace(",", "").replace("+", ""))
+                        except Exception:
+                            pass
+                        if "purchase" in trade_type or "buy" in trade_type:
+                            buy_count += 1
+                            total_bought += abs(value)
+                        elif "sale" in trade_type or "sell" in trade_type:
+                            sell_count += 1
+                            total_sold += abs(value)
+
+                result["insider_buy_count"] = buy_count
+                result["insider_sell_count"] = sell_count
+                result["insider_net_buys"] = buy_count - sell_count
+                result["insider_total_bought"] = round(total_bought, 2)
+                result["insider_total_sold"] = round(total_sold, 2)
+
+                if buy_count > sell_count and total_bought > total_sold:
+                    result["insider_sentiment"] = "bullish"
+                elif sell_count > buy_count and total_sold > total_bought:
+                    result["insider_sentiment"] = "bearish"
+                else:
+                    result["insider_sentiment"] = "neutral"
+
+    except Exception as e:
+        logger.debug(f"OpenInsider {ticker}: {e}")
+
+    _set_cache(f"insider_{ticker}", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. Zacks — Zacks Rank & EPS estimates
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_zacks_data(ticker):
+    """
+    Scrape Zacks for rank, EPS estimates, and earnings surprise %.
+    Zacks Rank: 1=Strong Buy, 2=Buy, 3=Hold, 4=Sell, 5=Strong Sell.
+    """
+    cached = _cached(f"zacks_{ticker}")
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        url = f"https://www.zacks.com/stock/quote/{ticker}"
+        r = requests.get(url, headers={
+            **HEADERS,
+            "Accept": "text/html,application/xhtml+xml",
+            "Referer": "https://www.zacks.com/",
+        }, timeout=10)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            text = soup.get_text(separator=" ")
+
+            # Zacks Rank
+            rank_match = re.findall(r'Zacks\s*Rank\s*[:#]?\s*(\d)\s*[-–]?\s*(\w+\s*\w*)', text, re.IGNORECASE)
+            if rank_match:
+                result["zacks_rank"] = int(rank_match[0][0])
+                result["zacks_rank_label"] = rank_match[0][1].strip()
+
+            # EPS estimates current quarter
+            eps_curr_match = re.findall(
+                r'(?:Current\s*Qtr|F1)\s*[:\s]*\$?([\-]?[\d]+\.?\d*)',
+                text, re.IGNORECASE
+            )
+            if eps_curr_match:
+                result["zacks_eps_est_current"] = float(eps_curr_match[0])
+
+            # EPS estimates next quarter
+            eps_next_match = re.findall(
+                r'(?:Next\s*Qtr|F2)\s*[:\s]*\$?([\-]?[\d]+\.?\d*)',
+                text, re.IGNORECASE
+            )
+            if eps_next_match:
+                result["zacks_eps_est_next"] = float(eps_next_match[0])
+
+            # Last earnings surprise %
+            surprise_match = re.findall(
+                r'(?:Earnings\s*)?Surprise\s*[:\s]*([\-+]?[\d]+\.?\d*)\s*%',
+                text, re.IGNORECASE
+            )
+            if surprise_match:
+                result["zacks_last_surprise_pct"] = float(surprise_match[0])
+
+    except Exception as e:
+        logger.debug(f"Zacks {ticker}: {e}")
+
+    _set_cache(f"zacks_{ticker}", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. FRED Economic / Macro Data
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_fred_macro():
+    """
+    Fetch macro indicators: 10Y Treasury yield, 5Y Treasury, Dollar Index.
+    Uses yfinance tickers as proxy for FRED data.
+    Cached for 1 hour (macro data, not per ticker).
+    """
+    cached = _cached("fred_macro", ttl=3600)
+    if cached:
+        return cached
+
+    result = {}
+
+    # 10Y Treasury Yield (^TNX)
+    try:
+        tnx = yf.Ticker("^TNX")
+        hist = tnx.history(period="5d")
+        if not hist.empty:
+            result["treasury_10y"] = round(float(hist["Close"].iloc[-1]), 3)
+            if len(hist) >= 2:
+                result["treasury_10y_prev"] = round(float(hist["Close"].iloc[-2]), 3)
+    except Exception as e:
+        logger.debug(f"FRED 10Y: {e}")
+
+    # 5Y Treasury Yield (^FVX)
+    try:
+        fvx = yf.Ticker("^FVX")
+        hist = fvx.history(period="5d")
+        if not hist.empty:
+            result["treasury_5y"] = round(float(hist["Close"].iloc[-1]), 3)
+    except Exception as e:
+        logger.debug(f"FRED 5Y: {e}")
+
+    # 2Y Treasury Yield (^IRX is 13-week, use 2YY=F or approximate)
+    try:
+        twy = yf.Ticker("2YY=F")
+        hist = twy.history(period="5d")
+        if not hist.empty:
+            result["treasury_2y"] = round(float(hist["Close"].iloc[-1]), 3)
+    except Exception as e:
+        logger.debug(f"FRED 2Y: {e}")
+
+    # Dollar Index (DX-Y.NYB)
+    try:
+        dx = yf.Ticker("DX-Y.NYB")
+        hist = dx.history(period="5d")
+        if not hist.empty:
+            result["dollar_index"] = round(float(hist["Close"].iloc[-1]), 2)
+    except Exception as e:
+        logger.debug(f"FRED Dollar Index: {e}")
+
+    # Yield curve spread (10Y - 2Y) for inversion detection
+    t10 = result.get("treasury_10y")
+    t2 = result.get("treasury_2y")
+    if t10 is not None and t2 is not None:
+        result["yield_curve_spread"] = round(t10 - t2, 3)
+
+    _set_cache("fred_macro", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 11. Social Sentiment (StockTwits)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_social_sentiment(ticker):
+    """
+    Fetch social sentiment from StockTwits API (free, no auth needed).
+    Counts bullish vs bearish messages to compute sentiment score.
+    """
+    cached = _cached(f"social_{ticker}")
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        url = f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            messages = data.get("messages", [])
+            bull_count = 0
+            bear_count = 0
+            for msg in messages:
+                sentiment = msg.get("entities", {}).get("sentiment", {})
+                if sentiment:
+                    basic = sentiment.get("basic")
+                    if basic == "Bullish":
+                        bull_count += 1
+                    elif basic == "Bearish":
+                        bear_count += 1
+
+            result["social_bull_count"] = bull_count
+            result["social_bear_count"] = bear_count
+            total = bull_count + bear_count
+            if total > 0:
+                result["social_sentiment_score"] = round((bull_count / total) * 100, 1)
+            else:
+                result["social_sentiment_score"] = 50.0  # neutral if no data
+    except Exception as e:
+        logger.debug(f"StockTwits {ticker}: {e}")
+
+    _set_cache(f"social_{ticker}", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 12. Short Squeeze Score (computed from Finviz + Yahoo data)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_short_squeeze_data(ticker):
+    """
+    Compute short squeeze potential score (0-100).
+    Uses short_float and days_to_cover from Finviz/Yahoo.
+    High squeeze = short_float > 15% AND days_to_cover > 3.
+    """
+    cached = _cached(f"squeeze_{ticker}")
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        # Pull from finviz and yahoo for short data
+        finviz = get_finviz_full(ticker)
+        yahoo = get_yahoo_deep_data(ticker)
+
+        short_float = finviz.get("short_float") or yahoo.get("short_pct_float")
+        short_ratio = yahoo.get("short_ratio")  # days to cover
+
+        if short_float is not None:
+            sf = short_float * 100 if short_float < 1 else short_float
+            result["short_float_pct"] = round(sf, 2)
+        else:
+            sf = 0
+
+        if short_ratio is not None:
+            result["days_to_cover"] = round(float(short_ratio), 2)
+        else:
+            short_ratio = 0
+
+        # Compute squeeze score
+        squeeze_score = 0
+        # Short float contribution (max 50 points)
+        if sf >= 30:
+            squeeze_score += 50
+        elif sf >= 20:
+            squeeze_score += 40
+        elif sf >= 15:
+            squeeze_score += 30
+        elif sf >= 10:
+            squeeze_score += 15
+        elif sf >= 5:
+            squeeze_score += 5
+
+        # Days to cover contribution (max 50 points)
+        dtc = float(short_ratio) if short_ratio else 0
+        if dtc >= 7:
+            squeeze_score += 50
+        elif dtc >= 5:
+            squeeze_score += 40
+        elif dtc >= 3:
+            squeeze_score += 25
+        elif dtc >= 2:
+            squeeze_score += 10
+
+        result["short_squeeze_score"] = min(100, squeeze_score)
+
+    except Exception as e:
+        logger.debug(f"Short squeeze {ticker}: {e}")
+
+    _set_cache(f"squeeze_{ticker}", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 13. Analyst Consensus (computed from Yahoo Finance data)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_analyst_consensus(ticker):
+    """
+    Compute a clean analyst consensus from Yahoo Finance recommendations.
+    Strong Buy=5, Buy=4, Hold=3, Sell=2, Strong Sell=1.
+    Returns weighted score and consensus label.
+    """
+    cached = _cached(f"analyst_consensus_{ticker}")
+    if cached:
+        return cached
+
+    result = {}
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+
+        # Try to get recommendation breakdown
+        try:
+            recs = t.recommendations
+            if recs is not None and not recs.empty:
+                # Get the most recent row(s)
+                latest = recs.tail(1).iloc[0] if len(recs) > 0 else None
+                if latest is not None:
+                    strong_buy = int(latest.get("strongBuy", 0))
+                    buy = int(latest.get("buy", 0))
+                    hold = int(latest.get("hold", 0))
+                    sell = int(latest.get("sell", 0))
+                    strong_sell = int(latest.get("strongSell", 0))
+
+                    result["analyst_strong_buy"] = strong_buy
+                    result["analyst_buy"] = buy
+                    result["analyst_hold"] = hold
+                    result["analyst_sell"] = sell
+                    result["analyst_strong_sell"] = strong_sell
+
+                    total = strong_buy + buy + hold + sell + strong_sell
+                    if total > 0:
+                        weighted = (
+                            strong_buy * 5 + buy * 4 + hold * 3 + sell * 2 + strong_sell * 1
+                        ) / total
+                        result["analyst_score"] = round(weighted, 2)
+                        result["analyst_total"] = total
+
+                        if weighted >= 4.5:
+                            result["analyst_consensus_label"] = "Strong Buy"
+                        elif weighted >= 3.5:
+                            result["analyst_consensus_label"] = "Buy"
+                        elif weighted >= 2.5:
+                            result["analyst_consensus_label"] = "Hold"
+                        elif weighted >= 1.5:
+                            result["analyst_consensus_label"] = "Sell"
+                        else:
+                            result["analyst_consensus_label"] = "Strong Sell"
+        except Exception as e:
+            logger.debug(f"Analyst recs detail {ticker}: {e}")
+
+        # Fallback to recommendationKey from info
+        if "analyst_score" not in result:
+            rec_key = info.get("recommendationKey", "")
+            score_map = {
+                "strong_buy": 5.0, "buy": 4.0, "hold": 3.0,
+                "sell": 2.0, "strong_sell": 1.0, "underperform": 2.0,
+                "outperform": 4.0,
+            }
+            if rec_key in score_map:
+                result["analyst_score"] = score_map[rec_key]
+                result["analyst_consensus_label"] = rec_key.replace("_", " ").title()
+
+    except Exception as e:
+        logger.debug(f"Analyst consensus {ticker}: {e}")
+
+    _set_cache(f"analyst_consensus_{ticker}", result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# MASTER AGGREGATOR — Consolidate all sources into one profile
 # ═════════════════════════════════════════════════════════════════════════════
 
 def get_enriched_ticker_profile(ticker):
@@ -558,6 +983,69 @@ def get_enriched_ticker_profile(ticker):
         if cboe:
             profile["market_vix"] = cboe.get("vix")
             profile["market_pc_ratio"] = cboe.get("total_pc")
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 7: CNN Fear & Greed Index ───────────────────────────────
+    try:
+        fg = get_fear_greed_index()
+        if fg:
+            profile.update(fg)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 8: OpenInsider — Insider Trades ─────────────────────────
+    try:
+        insider = get_insider_trades(ticker)
+        if insider:
+            profile.update(insider)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 9: Zacks Rank & EPS Estimates ───────────────────────────
+    try:
+        zacks = get_zacks_data(ticker)
+        if zacks:
+            profile.update(zacks)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 10: FRED Macro Data ─────────────────────────────────────
+    try:
+        macro = get_fred_macro()
+        if macro:
+            profile.update(macro)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 11: Social Sentiment (StockTwits) ───────────────────────
+    try:
+        social = get_social_sentiment(ticker)
+        if social:
+            profile.update(social)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 12: Short Squeeze Score ─────────────────────────────────
+    try:
+        squeeze = get_short_squeeze_data(ticker)
+        if squeeze:
+            profile.update(squeeze)
+            profile["sources_hit"] += 1
+    except Exception:
+        profile["sources_failed"] += 1
+
+    # ── Source 13: Analyst Consensus ───────────────────────────────────
+    try:
+        analyst = get_analyst_consensus(ticker)
+        if analyst:
+            profile.update(analyst)
             profile["sources_hit"] += 1
     except Exception:
         profile["sources_failed"] += 1
@@ -692,6 +1180,81 @@ def _compute_intel_score(p):
         if beat_rate >= 75:
             score += 3   # Company consistently beats estimates
         elif beat_rate <= 40:
+            score -= 2
+
+    # ── Fear & Greed Index (+/- 5) ────────────────────────────────────
+    fg_score = p.get("fg_score")
+    if fg_score is not None:
+        if fg_score <= 20:
+            score += 5   # Extreme Fear = contrarian bullish
+        elif fg_score <= 35:
+            score += 3   # Fear = mildly contrarian bullish
+        elif fg_score >= 80:
+            score -= 3   # Extreme Greed = caution
+        elif fg_score >= 65:
+            score -= 1   # Greed = slight caution
+
+    # ── Insider Trading Sentiment (+/- 8) ─────────────────────────────
+    insider_sentiment = p.get("insider_sentiment")
+    insider_net = p.get("insider_net_buys", 0)
+    if insider_sentiment == "bullish" and insider_net > 0:
+        score += 8   # Net insider buying = strong bullish signal
+    elif insider_sentiment == "bearish" and insider_net < 0:
+        score -= 5   # Net insider selling = bearish signal
+
+    # ── Zacks Rank (+/- 8) ────────────────────────────────────────────
+    zacks_rank = p.get("zacks_rank")
+    if zacks_rank is not None:
+        if zacks_rank == 1:
+            score += 8   # Strong Buy
+        elif zacks_rank == 2:
+            score += 5   # Buy
+        elif zacks_rank == 4:
+            score -= 4   # Sell
+        elif zacks_rank == 5:
+            score -= 8   # Strong Sell
+
+    # ── Social Sentiment (+/- 4) ──────────────────────────────────────
+    social_score = p.get("social_sentiment_score")
+    if social_score is not None:
+        if social_score >= 75:
+            score += 4   # Strong bullish social sentiment
+        elif social_score >= 60:
+            score += 2
+        elif social_score <= 25:
+            score -= 3   # Strong bearish social sentiment
+        elif social_score <= 40:
+            score -= 1
+
+    # ── Short Squeeze Potential (+5) ──────────────────────────────────
+    squeeze_score = p.get("short_squeeze_score")
+    if squeeze_score is not None:
+        if squeeze_score >= 70:
+            score += 5   # High squeeze potential
+        elif squeeze_score >= 50:
+            score += 3
+        elif squeeze_score >= 30:
+            score += 1
+
+    # ── Analyst Consensus (+/- 5) ─────────────────────────────────────
+    analyst_score = p.get("analyst_score")
+    if analyst_score is not None:
+        if analyst_score >= 4.5:
+            score += 5   # Strong Buy consensus
+        elif analyst_score >= 3.8:
+            score += 3
+        elif analyst_score <= 1.5:
+            score -= 5   # Strong Sell consensus
+        elif analyst_score <= 2.2:
+            score -= 3
+
+    # ── Macro: Rising yields cautious on growth (-2) ──────────────────
+    t10 = p.get("treasury_10y")
+    t10_prev = p.get("treasury_10y_prev")
+    if t10 is not None and t10_prev is not None:
+        yield_change = t10 - t10_prev
+        if yield_change > 0.05:
+            # 10Y yield rising fast — cautious on growth stocks
             score -= 2
 
     return max(0, min(100, score))
