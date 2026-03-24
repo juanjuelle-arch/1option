@@ -644,9 +644,27 @@ def get_top_picks(earnings_list=None):
     except Exception:
         news_articles = []
 
-    # Enrich top 15: company info + options + Finviz + news sentiment + multi-source scoring
-    logger.info("Enriching top 15 with options + Finviz + news + multi-source scoring...")
+    # Enrich top 15: company info + options + Finviz + multi-source intel + news
+    logger.info("Enriching top 15 with ALL 13 data sources...")
     enriched = []
+
+    # ── Fetch market-wide data once (shared across all tickers) ──────
+    market_intel = {}
+    if get_enriched_ticker_profile is not None:
+        try:
+            from market_scraper import get_fear_greed_index, get_fred_macro, get_cboe_pc_ratio as _cboe
+            fg = get_fear_greed_index()
+            market_intel["fg_score"] = fg.get("fg_score")
+            market_intel["fg_rating"] = fg.get("fg_rating")
+            macro = get_fred_macro()
+            market_intel.update(macro)
+            cboe = _cboe()
+            market_intel["market_vix"] = cboe.get("vix")
+            market_intel["market_pc"] = cboe.get("total_pc")
+            logger.info(f"Market intel: F&G={market_intel.get('fg_score')}, VIX={market_intel.get('market_vix')}, 10Y={market_intel.get('treasury_10y')}")
+        except Exception as e:
+            logger.debug(f"Market-wide intel failed: {e}")
+
     for s in top:
         ticker = s["ticker"]
         current_price = s.get("price", 0)
@@ -660,8 +678,8 @@ def get_top_picks(earnings_list=None):
         except Exception:
             s["company"] = ticker
 
-        # Options (with unusual activity detection)
-        opts = get_options_data(ticker)
+        # Options (with unusual activity detection) — fast mode for picks
+        opts = get_options_data(ticker, use_intel=False)
         unusual_calls, unusual_puts = [], []
         if opts:
             s["total_calls"]   = opts["total_calls"]
@@ -675,6 +693,24 @@ def get_top_picks(earnings_list=None):
         # Finviz: analyst rating, target price, insider activity, short float
         fv = get_finviz_data(ticker)
         s["finviz"] = fv
+
+        # ── Multi-source intelligence per ticker ─────────────────────
+        intel = {}
+        if get_enriched_ticker_profile is not None:
+            try:
+                intel = get_enriched_ticker_profile(ticker)
+                s["intel_score"] = intel.get("intel_score", 50)
+                s["iv_rank"] = intel.get("iv_rank")
+                s["short_squeeze_score"] = intel.get("short_squeeze_score")
+                s["social_sentiment"] = intel.get("social_sentiment_score")
+                s["analyst_consensus"] = intel.get("analyst_consensus_label")
+                s["insider_sentiment"] = intel.get("insider_sentiment")
+                s["zacks_rank"] = intel.get("zacks_rank")
+                s["whisper_eps"] = intel.get("whisper_eps")
+                s["beat_rate"] = intel.get("beat_rate")
+                s["upside_pct"] = intel.get("upside_pct")
+            except Exception as e:
+                logger.debug(f"Intel {ticker}: {e}")
 
         # ── Multi-source scoring ──────────────────────────────────────────────
         score = 0
@@ -827,6 +863,134 @@ def get_top_picks(earnings_list=None):
                     score -= 6; signals.append(f"Mixed/negative news")
         except Exception as e:
             logger.debug(f"Scoring signals for {ticker}: {e}")
+
+        # ── NEW: Multi-source intelligence signals (10-17) ───────────
+
+        # 10. CNN Fear & Greed — contrarian indicator
+        fg = market_intel.get("fg_score")
+        if fg is not None:
+            if fg <= 20:
+                score += 8; signals.append(f"Extreme Fear ({fg}) — contrarian bullish")
+                conviction_count += 1
+            elif fg <= 35:
+                score += 4; signals.append(f"Fear market ({fg})")
+            elif fg >= 80:
+                score -= 5; signals.append(f"Extreme Greed ({fg}) — caution")
+            elif fg >= 65:
+                score -= 2
+
+        # 11. VIX level — elevated VIX = opportunity for value, extreme = risk
+        vix = market_intel.get("market_vix")
+        if vix is not None:
+            if 20 <= vix <= 30:
+                score += 4; signals.append(f"Elevated VIX ({vix}) — volatility opportunity")
+            elif vix > 35:
+                score -= 4; signals.append(f"VIX spike ({vix}) — high risk")
+            elif vix < 14:
+                score -= 1  # Complacency
+
+        # 12. IV Rank — cheap options = good for buying
+        iv_rank = intel.get("iv_rank")
+        if iv_rank is not None:
+            if iv_rank <= 20:
+                score += 6; signals.append(f"Low IV Rank ({iv_rank}%) — cheap options")
+                conviction_count += 1
+            elif iv_rank <= 35:
+                score += 3
+            elif iv_rank >= 80:
+                score -= 4; signals.append(f"High IV Rank ({iv_rank}%) — expensive options")
+
+        # 13. Insider buying (SEC filings via OpenInsider)
+        insider_sent = intel.get("insider_sentiment")
+        if insider_sent:
+            if insider_sent == "bullish":
+                score += 10; signals.append("Insider NET BUYING (SEC filings)")
+                conviction_count += 1
+            elif insider_sent == "bearish":
+                score -= 6; signals.append("Insider NET SELLING (SEC filings)")
+
+        # 14. Short Squeeze potential
+        sq_score = intel.get("short_squeeze_score")
+        if sq_score is not None and sq_score > 0:
+            if sq_score >= 75:
+                score += 8; signals.append(f"Short squeeze alert (score {sq_score})")
+                conviction_count += 1
+            elif sq_score >= 50:
+                score += 4; signals.append(f"Short squeeze potential ({sq_score})")
+            elif sq_score >= 30:
+                score += 2
+
+        # 15. Social sentiment (StockTwits)
+        social = intel.get("social_sentiment_score")
+        if social is not None:
+            if social >= 70:
+                score += 5; signals.append(f"Social sentiment bullish ({social}%)")
+            elif social >= 55:
+                score += 2
+            elif social <= 30:
+                score -= 4; signals.append(f"Social sentiment bearish ({social}%)")
+            elif social <= 40:
+                score -= 1
+
+        # 16. Zacks Rank
+        zr = intel.get("zacks_rank")
+        if zr is not None:
+            if zr == 1:
+                score += 10; signals.append("Zacks #1 Strong Buy"); conviction_count += 1
+            elif zr == 2:
+                score += 6; signals.append("Zacks #2 Buy")
+            elif zr == 4:
+                score -= 4; signals.append("Zacks #4 Sell")
+            elif zr == 5:
+                score -= 8; signals.append("Zacks #5 Strong Sell")
+
+        # 17. Macro environment — yield curve + treasury
+        spread = market_intel.get("yield_curve_spread")
+        t10y = market_intel.get("treasury_10y")
+        t10y_prev = market_intel.get("treasury_10y_prev")
+        if spread is not None:
+            if spread < 0:
+                score -= 3; signals.append(f"Inverted yield curve ({spread}bp) — recession risk")
+        if t10y and t10y_prev:
+            rate_change = t10y - t10y_prev
+            sector = s.get("sector", "")
+            if rate_change > 0.05 and sector in ("Technology", "Consumer Cyclical"):
+                score -= 3; signals.append(f"Rising rates pressure on {sector}")
+            elif rate_change < -0.05:
+                score += 2  # Falling rates = growth stocks benefit
+
+        # 18. Earnings beat rate (EarningsWhispers)
+        beat_rate = intel.get("beat_rate")
+        if beat_rate is not None:
+            if beat_rate >= 80:
+                score += 5; signals.append(f"Earnings beat {beat_rate}% of time")
+                conviction_count += 1
+            elif beat_rate >= 65:
+                score += 2
+            elif beat_rate <= 35:
+                score -= 4; signals.append(f"Earnings miss rate high ({100-beat_rate}%)")
+
+        # 19. Analyst consensus (weighted from Yahoo recommendations)
+        analyst_label = intel.get("analyst_consensus_label")
+        analyst_score_val = intel.get("analyst_score")
+        if analyst_score_val is not None:
+            if analyst_score_val >= 4.2:
+                score += 6; signals.append(f"Wall Street consensus: {analyst_label}")
+            elif analyst_score_val >= 3.5:
+                score += 3
+            elif analyst_score_val <= 2.0:
+                score -= 5; signals.append(f"Wall Street consensus: {analyst_label}")
+
+        # 20. Upside to price target (multi-source average)
+        upside = intel.get("upside_pct")
+        if upside is not None and upside != s.get("finviz", {}).get("target_price"):
+            # Only add if different from Finviz target (avoid double counting)
+            if upside >= 40:
+                score += 6; signals.append(f"Yahoo target +{upside}% upside")
+            elif upside >= 25:
+                score += 3
+            elif upside <= -10:
+                score -= 4; signals.append(f"Below Yahoo target {upside}%")
 
         # Conviction level — requires BOTH strong signal count AND strong score
         score = min(max(round(score, 1), 0), 100)
