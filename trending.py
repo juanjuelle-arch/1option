@@ -456,10 +456,11 @@ def get_trending_watchlist():
         if volume and avg_volume and avg_volume > 0:
             vol_ratio = round(volume / avg_volume, 2)
 
-        # Get IV rank from enriched profile
+        # Get full enriched profile from ALL 13 data sources
+        profile = {}
         try:
             if get_enriched_ticker_profile:
-                profile = get_enriched_ticker_profile(ticker)
+                profile = get_enriched_ticker_profile(ticker) or {}
                 if profile:
                     iv_rank = profile.get("iv_rank")
                     # Also check for unusual options if not already flagged
@@ -476,17 +477,79 @@ def get_trending_watchlist():
         except Exception as e:
             logger.debug(f"Trending earnings check for {ticker}: {e}")
 
-        # ── Conviction scoring ───────────────────────────────────────────
+        # ── Conviction scoring (uses ALL data sources) ─────────────────
         conviction = source_count * 20  # base: 20 per source
+
+        # Unusual options activity
         if has_unusual_options:
             conviction += 10
+
+        # Earnings proximity
         if earnings_within_7d:
             conviction += 5
+
+        # Low IV = cheap options (from Barchart/Yahoo)
         if iv_rank is not None and iv_rank < 30:
             conviction += 5
+
+        # Intel-based boosts from all 13 sources
+        # Analyst consensus (Yahoo + Finviz + Zacks)
+        analyst_recom = profile.get("analyst_recom")
+        if analyst_recom and analyst_recom <= 1.5:
+            conviction += 8  # Strong Buy consensus
+        elif analyst_recom and analyst_recom <= 2.0:
+            conviction += 4
+
+        # Insider buying (OpenInsider / SEC filings)
+        insider_sent = profile.get("insider_sentiment")
+        if insider_sent == "bullish":
+            conviction += 8
+
+        # Social sentiment (StockTwits)
+        social_score = profile.get("social_sentiment_score")
+        if social_score is not None and social_score >= 70:
+            conviction += 5
+
+        # Zacks Rank
+        zacks_rank = profile.get("zacks_rank")
+        if zacks_rank == 1:
+            conviction += 6
+        elif zacks_rank == 2:
+            conviction += 3
+
+        # Short squeeze potential (Finviz + Yahoo)
+        squeeze = profile.get("short_squeeze_score")
+        if squeeze is not None and squeeze >= 70:
+            conviction += 8
+        elif squeeze is not None and squeeze >= 50:
+            conviction += 4
+
+        # Upside to analyst target (Yahoo + Stockanalysis)
+        upside = profile.get("upside_pct")
+        if upside is not None and upside >= 40:
+            conviction += 6
+        elif upside is not None and upside >= 25:
+            conviction += 3
+
+        # Earnings beat rate (EarningsWhispers)
+        beat_rate = profile.get("beat_rate")
+        if beat_rate is not None and beat_rate >= 80:
+            conviction += 4
+
+        # Revenue growth (Yahoo fundamentals)
+        rev_growth = profile.get("revenue_growth")
+        if rev_growth is not None:
+            rg = rev_growth * 100 if abs(rev_growth) < 5 else rev_growth
+            if rg >= 30:
+                conviction += 6
+            elif rg >= 15:
+                conviction += 3
+
         conviction = min(conviction, 100)
 
-        if conviction >= 60:
+        if conviction >= 70:
+            conviction_label = "EXTREME"
+        elif conviction >= 55:
             conviction_label = "HIGH"
         elif conviction >= 40:
             conviction_label = "MEDIUM"
@@ -507,6 +570,14 @@ def get_trending_watchlist():
             "earnings_within_7d": earnings_within_7d,
             "conviction_score": conviction,
             "conviction_label": conviction_label,
+            # Extra intel for display
+            "analyst_rating": round(analyst_recom, 2) if analyst_recom else None,
+            "insider_sentiment": insider_sent,
+            "social_sentiment": round(social_score, 0) if social_score else None,
+            "zacks_rank": zacks_rank,
+            "short_squeeze": round(squeeze, 0) if squeeze else None,
+            "target_upside": round(upside, 0) if upside else None,
+            "beat_rate": round(beat_rate, 0) if beat_rate else None,
         })
 
     # ── Step 4: Sort by conviction score and limit to top 10 ─────────────
