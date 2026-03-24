@@ -543,9 +543,9 @@ def get_options_data(ticker, use_intel=True):
 
 def get_top_picks(earnings_list=None):
     """
-    1. Get candidate tickers from Yahoo screener + watchlist
+    1. Get candidate tickers from Yahoo screener + watchlist + TRENDING
     2. Batch-download 1yr history for all at once (fast)
-    3. Score each ticker
+    3. Score each ticker (20 factors + trending boost)
     4. Get options data only for top 15 (to limit API calls)
     """
     if earnings_list is None:
@@ -553,6 +553,42 @@ def get_top_picks(earnings_list=None):
     earnings_tickers = {e["ticker"]: e for e in earnings_list}
 
     candidates = get_yahoo_screener_movers()
+
+    # ── Inject trending tickers into candidate pool ──────────────────
+    trending_map = {}  # ticker -> {sources: [...], source_count: int}
+    try:
+        from trending import (
+            get_finviz_trending, get_yahoo_trending,
+            get_reddit_wsb_trending, get_stocktwits_trending
+        )
+        sources_data = {
+            "Finviz": get_finviz_trending(),
+            "Yahoo": get_yahoo_trending(),
+            "Reddit": get_reddit_wsb_trending(),
+            "StockTwits": get_stocktwits_trending(),
+        }
+        for source_name, tickers_list in sources_data.items():
+            for t in tickers_list:
+                if t not in trending_map:
+                    trending_map[t] = {"sources": [], "source_count": 0}
+                trending_map[t]["sources"].append(source_name)
+                trending_map[t]["source_count"] += 1
+
+        # Add trending tickers to candidates (prioritize multi-source)
+        trending_sorted = sorted(trending_map.keys(),
+                                  key=lambda t: trending_map[t]["source_count"],
+                                  reverse=True)
+        added = 0
+        for t in trending_sorted:
+            if t not in candidates:
+                candidates.append(t)
+                added += 1
+            if added >= 15:  # cap to avoid bloating
+                break
+        logger.info(f"Trending: {len(trending_map)} tickers found, {added} new added to candidates")
+    except Exception as e:
+        logger.debug(f"Trending injection failed: {e}")
+
     logger.info(f"Scoring {len(candidates)} candidates...")
 
     # Batch download 1yr history for all candidates
@@ -632,6 +668,15 @@ def get_top_picks(earnings_list=None):
             })
         except Exception as e:
             logger.error(f"Score error {ticker}: {e}")
+
+    # Filter out penny stocks, leveraged ETFs, and junk
+    # A Wall Street pro doesn't recommend $1 stocks
+    JUNK_PATTERNS = re.compile(r'^(TQQQ|SQQQ|UVXY|SPXS|SPXL|LABU|LABD|SOXL|SOXS|FNGU|FNGD|TZA|TNA|CRCD|YANG|YINN)', re.IGNORECASE)
+    scored = [
+        s for s in scored
+        if s["price"] >= 10.0                   # No penny/micro stocks under $10
+        and not JUNK_PATTERNS.match(s["ticker"])  # No leveraged/inverse ETFs
+    ]
 
     # Sort and take top 15 for enrichment
     scored.sort(key=lambda x: x["score"], reverse=True)
@@ -991,6 +1036,22 @@ def get_top_picks(earnings_list=None):
                 score += 3
             elif upside <= -10:
                 score -= 4; signals.append(f"Below Yahoo target {upside}%")
+
+        # 21. TRENDING BOOST — ticker appearing across multiple social/screener sources
+        trending_info = trending_map.get(ticker)
+        if trending_info:
+            src_count = trending_info["source_count"]
+            src_names = ", ".join(trending_info["sources"])
+            if src_count >= 3:
+                score += 15; signals.append(f"🔥 Trending on {src_count} sources ({src_names})")
+                conviction_count += 1
+            elif src_count >= 2:
+                score += 10; signals.append(f"📈 Trending on {src_names}")
+                conviction_count += 1
+            elif src_count == 1:
+                score += 4; signals.append(f"Trending on {src_names}")
+            s["trending_sources"] = trending_info["sources"]
+            s["trending_count"] = src_count
 
         # Conviction level — requires BOTH strong signal count AND strong score
         score = min(max(round(score, 1), 0), 100)
