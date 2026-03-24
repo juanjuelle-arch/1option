@@ -224,8 +224,7 @@
     <!-- Beginner-friendly info -->
     <p style="color:var(--text-dim); font-size:12px; margin-bottom:14px; line-height:1.5;">
       📘 <strong style="color:var(--text);">How to read this:</strong>
-      Strike Price = the price you bet the stock will reach.
-      Option Price = what you pay per share (× 100 shares per contract).
+      Call/Put Price = what you pay per share (× 100 shares per contract).
     </p>
 
     <!-- Calls table -->
@@ -237,8 +236,7 @@
           <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--card-border);">
             <th style="padding:8px 10px;">Ticker</th>
             <th style="padding:8px 10px;">Type</th>
-            <th style="padding:8px 10px;">Strike Price</th>
-            <th style="padding:8px 10px;">Option Price</th>
+            <th style="padding:8px 10px;">Call Price</th>
             <th style="padding:8px 10px;">Cost / Contract</th>
             <th style="padding:8px 10px;">Expires</th>
             <th style="padding:8px 10px;">Volume</th>
@@ -249,8 +247,7 @@
           <tr style="border-bottom:1px solid #1e1e3522;">
             <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--text);">{{ ticker }}</td>
             <td style="padding:10px;"><span style="background:rgba(0,212,170,0.15); color:var(--green); padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700;">CALL</span></td>
-            <td style="padding:10px; font-family:'JetBrains Mono',monospace; color:var(--green);">${{ "%.2f"|format(c.strike) }}</td>
-            <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700;">${{ "%.2f"|format(c.last_price) }}</td>
+            <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--green);">${{ "%.2f"|format(c.last_price) }}</td>
             <td style="padding:10px; font-family:'JetBrains Mono',monospace; color:var(--yellow);">${{ "{:,.0f}".format(c.last_price * 100) }}</td>
             <td style="padding:10px; color:var(--text-dim);">{{ c.expiry }}</td>
             <td style="padding:10px; color:var(--text-dim);">{{ "{:,}".format(c.volume) }}</td>
@@ -273,8 +270,7 @@
           <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--card-border);">
             <th style="padding:8px 10px;">Ticker</th>
             <th style="padding:8px 10px;">Type</th>
-            <th style="padding:8px 10px;">Strike Price</th>
-            <th style="padding:8px 10px;">Option Price</th>
+            <th style="padding:8px 10px;">Put Price</th>
             <th style="padding:8px 10px;">Cost / Contract</th>
             <th style="padding:8px 10px;">Expires</th>
             <th style="padding:8px 10px;">Volume</th>
@@ -285,8 +281,7 @@
           <tr style="border-bottom:1px solid #1e1e3522;">
             <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--text);">{{ ticker }}</td>
             <td style="padding:10px;"><span style="background:rgba(255,51,102,0.15); color:var(--red); padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700;">PUT</span></td>
-            <td style="padding:10px; font-family:'JetBrains Mono',monospace; color:var(--red);">${{ "%.2f"|format(p.strike) }}</td>
-            <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700;">${{ "%.2f"|format(p.last_price) }}</td>
+            <td style="padding:10px; font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--red);">${{ "%.2f"|format(p.last_price) }}</td>
             <td style="padding:10px; font-family:'JetBrains Mono',monospace; color:var(--yellow);">${{ "{:,.0f}".format(p.last_price * 100) }}</td>
             <td style="padding:10px; color:var(--text-dim);">{{ p.expiry }}</td>
             <td style="padding:10px; color:var(--text-dim);">{{ "{:,}".format(p.volume) }}</td>
