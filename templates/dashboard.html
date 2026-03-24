@@ -251,22 +251,27 @@
         </div>
       </div>
 
+      <!-- Beginner tip -->
+      <p style="color:var(--text-dim); font-size:11px; margin-bottom:10px; line-height:1.4;">
+        📘 Strike = target price · Option Price = cost per share · Contract = price × 100 shares
+      </p>
+
       <div id="tab-calls" class="tab-pane">
         <div class="opt-table-scroll">
           <table class="options-table">
             <thead>
-              <tr><th>Ticker</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>Open Int.</th><th>IV</th><th>Last</th></tr>
+              <tr><th>Ticker</th><th>Type</th><th>Strike Price</th><th>Option Price</th><th>Cost / Contract</th><th>Expires</th><th>Volume</th></tr>
             </thead>
             <tbody>
               {% for c in top_calls %}
               <tr class="calls-row">
                 <td><strong class="pos">{{ c.ticker }}</strong></td>
-                <td>${{ c.strike }}</td>
+                <td><span style="background:rgba(0,212,170,0.15); color:var(--green); padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700;">CALL</span></td>
+                <td>${{ "%.2f"|format(c.strike) }}</td>
+                <td><strong>${{ "%.2f"|format(c.last_price) }}</strong></td>
+                <td style="color:var(--yellow);">${{ "{:,.0f}".format(c.last_price * 100) }}</td>
                 <td>{{ c.expiry }}</td>
-                <td class="pos">{{ "{:,}".format(c.volume) }}</td>
-                <td>{{ "{:,}".format(c.open_interest) }}</td>
-                <td>{{ c.iv }}%</td>
-                <td>${{ c.last_price }}</td>
+                <td>{{ "{:,}".format(c.volume) }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -278,18 +283,18 @@
         <div class="opt-table-scroll">
           <table class="options-table">
             <thead>
-              <tr><th>Ticker</th><th>Strike</th><th>Expiry</th><th>Volume</th><th>Open Int.</th><th>IV</th><th>Last</th></tr>
+              <tr><th>Ticker</th><th>Type</th><th>Strike Price</th><th>Option Price</th><th>Cost / Contract</th><th>Expires</th><th>Volume</th></tr>
             </thead>
             <tbody>
               {% for p in top_puts %}
               <tr class="puts-row">
                 <td><strong class="neg">{{ p.ticker }}</strong></td>
-                <td>${{ p.strike }}</td>
+                <td><span style="background:rgba(255,51,102,0.15); color:var(--red); padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700;">PUT</span></td>
+                <td>${{ "%.2f"|format(p.strike) }}</td>
+                <td><strong>${{ "%.2f"|format(p.last_price) }}</strong></td>
+                <td style="color:var(--yellow);">${{ "{:,.0f}".format(p.last_price * 100) }}</td>
                 <td>{{ p.expiry }}</td>
-                <td class="neg">{{ "{:,}".format(p.volume) }}</td>
-                <td>{{ "{:,}".format(p.open_interest) }}</td>
-                <td>{{ p.iv }}%</td>
-                <td>${{ p.last_price }}</td>
+                <td>{{ "{:,}".format(p.volume) }}</td>
               </tr>
               {% endfor %}
             </tbody>
