@@ -16,6 +16,13 @@ import logging
 import json
 import time
 
+# Multi-source market intelligence
+try:
+    from market_scraper import get_enriched_ticker_profile, get_cboe_pc_ratio
+except ImportError:
+    get_enriched_ticker_profile = None
+    get_cboe_pc_ratio = None
+
 logger = logging.getLogger(__name__)
 
 # ─── High-conviction watchlist (active, liquid tickers) ──────────────────────
@@ -272,16 +279,17 @@ def detect_unusual_options(calls_df, puts_df, current_price):
 
 # ─── Options Data ────────────────────────────────────────────────────────────
 
-def _score_option(row, current_price, kind):
+def _score_option(row, current_price, kind, intel_score=50):
     """
-    Wall-Street-grade option scoring.
-    Evaluates each contract on 6 dimensions a professional trader cares about:
+    Wall-Street-grade option scoring with multi-source intelligence.
+    Evaluates each contract on 7 dimensions a professional trader cares about:
       1. Moneyness   — slightly OTM (2-8%) is the sweet spot for risk/reward
       2. Liquidity    — tight bid/ask spread, high volume + open interest
       3. Volume/OI    — ratio > 1 = fresh money flowing in (institutional signal)
       4. IV value     — moderate IV preferred (not overpriced, not dead)
       5. Notional     — bigger dollar flow = institutional conviction
       6. Premium      — filter out penny options and overpriced ones
+      7. Intel boost  — multi-source intelligence score from aggregated data
     """
     try:
         strike = float(row.get("strike", 0) or 0)
@@ -405,7 +413,20 @@ def _score_option(row, current_price, kind):
         if otm_pct > 20:
             return -999            # Way too far OTM
 
-        total = moneyness_score + liq_score + voi_score + iv_score + not_score + prem_score
+        # ── 7. Multi-source intelligence boost (0-15 pts) ───────────
+        # intel_score is 0-100 from aggregated data (analyst, IV rank,
+        # fundamentals, earnings, institutional activity)
+        intel_boost = 0
+        if intel_score >= 70:
+            intel_boost = 15       # Strong conviction from all sources
+        elif intel_score >= 60:
+            intel_boost = 10
+        elif intel_score >= 50:
+            intel_boost = 5
+        elif intel_score <= 30:
+            intel_boost = -10      # Red flags from multiple sources
+
+        total = moneyness_score + liq_score + voi_score + iv_score + not_score + prem_score + intel_boost
         return total
 
     except Exception:
@@ -452,6 +473,17 @@ def get_options_data(ticker):
 
         unusual_calls, unusual_puts = detect_unusual_options(all_calls, all_puts, current_price)
 
+        # ── Fetch multi-source intelligence for smarter scoring ──────
+        intel_score = 50  # neutral default
+        intel_profile = {}
+        if get_enriched_ticker_profile is not None:
+            try:
+                intel_profile = get_enriched_ticker_profile(ticker)
+                intel_score = intel_profile.get("intel_score", 50)
+                logger.debug(f"Options {ticker}: intel_score={intel_score}, sources={intel_profile.get('sources_hit', 0)}")
+            except Exception as e:
+                logger.debug(f"Options {ticker} intel failed: {e}")
+
         def fmt(row, kind):
             exp = row.get("expiry", exps[0])
             return {
@@ -469,7 +501,7 @@ def get_options_data(ticker):
         # ── Score and rank calls ─────────────────────────────────────────
         if not all_calls.empty and current_price > 0:
             all_calls["_score"] = all_calls.apply(
-                lambda r: _score_option(r, current_price, "CALL"), axis=1
+                lambda r: _score_option(r, current_price, "CALL", intel_score), axis=1
             )
             best_calls = all_calls[all_calls["_score"] > 0].sort_values(
                 "_score", ascending=False
@@ -484,7 +516,7 @@ def get_options_data(ticker):
         # ── Score and rank puts ──────────────────────────────────────────
         if not all_puts.empty and current_price > 0:
             all_puts["_score"] = all_puts.apply(
-                lambda r: _score_option(r, current_price, "PUT"), axis=1
+                lambda r: _score_option(r, current_price, "PUT", intel_score), axis=1
             )
             best_puts = all_puts[all_puts["_score"] > 0].sort_values(
                 "_score", ascending=False
@@ -828,27 +860,68 @@ def get_top_picks(earnings_list=None):
 
 def get_global_top_options():
     """
-    Aggregate best options across top tickers. Options are already
-    professionally scored by _score_option inside get_options_data,
-    so we rank the aggregated pool by a composite of notional flow
-    (volume × price × 100) and liquidity (volume + OI).
+    Aggregate the single best call and put from EACH ticker across the
+    full watchlist, then rank the pool. This ensures diversity — no single
+    ticker can dominate the board.
+
+    Scans all 34 watchlist tickers + any cached top picks tickers.
+    Max 1 call + 1 put per ticker shown in the final top 5.
     """
     all_calls, all_puts = [], []
-    for ticker in WATCHLIST[:12]:
+
+    # Scan the full watchlist for maximum coverage
+    scan_tickers = list(WATCHLIST)
+
+    # Also include any tickers from cached top picks that aren't in watchlist
+    try:
+        from cache import get_cached
+        cached_picks = get_cached("top_picks")
+        if cached_picks:
+            for pick in cached_picks:
+                t = pick.get("ticker")
+                if t and t not in scan_tickers:
+                    scan_tickers.append(t)
+    except Exception:
+        pass
+
+    for ticker in scan_tickers:
         opts = get_options_data(ticker)
-        if opts:
-            all_calls.extend(opts["top_calls"])
-            all_puts.extend(opts["top_puts"])
+        if not opts:
+            continue
+        # Take only the BEST call and BEST put per ticker (already scored & sorted)
+        if opts["top_calls"]:
+            all_calls.append(opts["top_calls"][0])
+        if opts["top_puts"]:
+            all_puts.append(opts["top_puts"][0])
 
     def _rank(opt):
-        """Rank by notional value (institutional conviction) + liquidity."""
-        notional = opt["volume"] * opt["last_price"] * 100
-        liquidity = opt["volume"] + opt.get("open_interest", 0)
-        return notional * 0.7 + liquidity * 0.3
+        """
+        Rank by composite: notional conviction + volume/OI freshness.
+        Notional = real dollar flow (institutional signal).
+        Vol/OI > 1 = new money, not just old positions.
+        """
+        vol = opt["volume"]
+        oi  = opt.get("open_interest", 1) or 1
+        notional = vol * opt["last_price"] * 100
+        vol_oi = min(vol / oi, 5)  # cap to avoid outlier distortion
+        return notional * 0.5 + vol * 0.2 + vol_oi * 10000 * 0.3
 
     all_calls.sort(key=_rank, reverse=True)
     all_puts.sort(key=_rank, reverse=True)
-    return all_calls[:5], all_puts[:5]
+
+    # Ensure no duplicate tickers in final output
+    def _dedupe(options, limit=5):
+        seen = set()
+        result = []
+        for opt in options:
+            if opt["ticker"] not in seen:
+                seen.add(opt["ticker"])
+                result.append(opt)
+                if len(result) >= limit:
+                    break
+        return result
+
+    return _dedupe(all_calls, 5), _dedupe(all_puts, 5)
 
 
 # ─── Earnings Calendar ───────────────────────────────────────────────────────
