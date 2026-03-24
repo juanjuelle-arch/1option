@@ -54,7 +54,7 @@ function animateSectorBars() {
   });
 }
 
-// ─── Live Market Ticker Refresh (every 60s) ───────────────────────────────────
+// ─── Live Market Ticker Refresh (every 30s) ──────────────────────────────────
 async function refreshMarketTicker() {
   try {
     const res = await fetch('/api/market');
@@ -89,19 +89,26 @@ document.querySelectorAll('.flash').forEach(el => {
   }, 4000);
 });
 
-// ─── Auto-reload dashboard every 2 minutes for live data ─────────────────────
+// ─── Dashboard auto-reload with visible countdown ───────────────────────────
 function startDashboardAutoReload() {
   if (!document.querySelector('.dashboard')) return;
 
   let countdown = 120;
-  const el = document.getElementById('updatedAt');
+  const updatedEl = document.getElementById('updatedAt');
 
-  setInterval(() => {
+  const reloadInterval = setInterval(() => {
     countdown--;
+    if (updatedEl && countdown <= 15) {
+      updatedEl.textContent = 'Refreshing in ' + countdown + 's';
+    }
     if (countdown <= 0) {
+      clearInterval(reloadInterval);
       window.location.reload();
     }
   }, 1000);
+
+  // Clean up on page leave
+  window.addEventListener('beforeunload', () => clearInterval(reloadInterval));
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -119,8 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Ticker refreshes every 30s
-  setInterval(refreshMarketTicker, 30000);
+  // Ticker refreshes every 30s (clean up on leave)
+  const tickerInterval = setInterval(refreshMarketTicker, 30000);
+  window.addEventListener('beforeunload', () => clearInterval(tickerInterval));
 
   // Dashboard: full page reload every 2 minutes to show fresh data
   startDashboardAutoReload();

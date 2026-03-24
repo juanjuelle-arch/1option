@@ -293,7 +293,7 @@
     <h2 class="section-title">Recent News</h2>
     <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
       {% for article in news %}
-      <a href="{{ article.link }}" target="_blank" rel="noopener"
+      <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer"
          style="display:block; padding:14px 16px; background:var(--bg2); border:1px solid var(--card-border); border-radius:8px; text-decoration:none; transition:border-color 0.2s;"
          onmouseover="this.style.borderColor='var(--green)'"
          onmouseout="this.style.borderColor='var(--card-border)'">

@@ -18,16 +18,18 @@
     </p>
 
     <!-- Search -->
+    <label for="stockSearch" class="sr-only">Search stocks</label>
     <input
       type="text"
       id="stockSearch"
       class="stocks-search"
       placeholder="🔍  Search ticker, company, or sector…"
       autocomplete="off"
+      aria-label="Search stocks by ticker, company, or sector"
     />
 
     <!-- Sector tabs -->
-    <div class="sector-tabs" id="sectorTabs">
+    <div class="sector-tabs" id="sectorTabs" role="tablist" aria-label="Filter by sector">
       <button class="sector-tab active" data-sector="all">All</button>
       <button class="sector-tab" data-sector="Tech">Tech</button>
       <button class="sector-tab" data-sector="Finance">Finance</button>

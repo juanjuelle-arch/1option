@@ -158,6 +158,12 @@
         </div>
       </div>
       <div class="picks-grid">
+        {% if not picks %}
+        <div style="grid-column:1/-1; text-align:center; padding:48px; color:var(--text-dim);">
+          <div style="font-size:2rem; margin-bottom:12px;">📊</div>
+          <p>Loading picks data... refresh in a moment.</p>
+        </div>
+        {% endif %}
         {% for pick in picks %}
         <div class="pick-card pick-card--full {% if pick.conviction in ['EXTREME', 'HIGH'] %}pick-card--hot{% endif %}">
           {% if pick.has_earnings %}
@@ -320,10 +326,16 @@
           <p class="section-sub">Yahoo Finance · Reuters · MarketWatch · CNBC · Bloomberg</p>
         </div>
       </div>
+      {% if not news %}
+      <div style="text-align:center; padding:48px; color:var(--text-dim);">
+        <div style="font-size:2rem; margin-bottom:12px;">📰</div>
+        <p>Loading news feeds... data will appear shortly.</p>
+      </div>
+      {% else %}
       <div class="news-layout">
         <div class="news-featured">
           {% for article in news[:3] %}
-          <a href="{{ article.link }}" target="_blank" rel="noopener" class="news-feat-card">
+          <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer" class="news-feat-card">
             <span class="news-src">{{ article.source }}</span>
             <h3 class="news-feat-title">{{ article.title }}</h3>
             <span class="news-time">{{ article.published_str }}</span>
@@ -332,7 +344,7 @@
         </div>
         <div class="news-list">
           {% for article in news[3:] %}
-          <a href="{{ article.link }}" target="_blank" rel="noopener" class="news-list-item">
+          <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer" class="news-list-item">
             <span class="news-src news-src--sm">{{ article.source[:8] }}</span>
             <span class="news-list-title">{{ article.title }}</span>
             <span class="news-list-time">{{ article.published_str }}</span>
@@ -340,6 +352,7 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
     </div>
 
   </div><!-- /container -->

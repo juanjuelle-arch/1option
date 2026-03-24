@@ -129,7 +129,7 @@
     </div>
     <div class="news-grid">
       {% for article in news %}
-      <a href="{{ article.link }}" target="_blank" rel="noopener" class="news-card">
+      <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer" class="news-card">
         <span class="news-source">{{ article.source }}</span>
         <h3 class="news-title">{{ article.title }}</h3>
         <span class="news-time">{{ article.published_str }}</span>

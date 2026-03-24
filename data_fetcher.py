@@ -81,8 +81,8 @@ def get_market_overview():
                     curr = float(prices.iloc[-1]); change = 0; pct = 0
                 result.append({"name": name, "symbol": sym, "price": round(curr, 2),
                                 "change": round(change, 2), "pct": round(pct, 2), "positive": change >= 0})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Market overview {name}: {e}")
     except Exception as e:
         logger.error(f"Market overview: {e}")
     return result
@@ -373,7 +373,9 @@ def get_top_picks(earnings_list=None):
                 prices_10d = closes_10d[ticker].dropna()
                 if len(prices_10d) >= 2:
                     current_price = float(prices_10d.iloc[-1])
-                    pct_gain = ((current_price - float(prices_10d.iloc[0])) / float(prices_10d.iloc[0])) * 100
+                    first_price = float(prices_10d.iloc[0])
+                    if first_price > 0:
+                        pct_gain = ((current_price - first_price) / first_price) * 100
 
             # Get 1yr history for technicals
             hist_1y = None
@@ -613,8 +615,8 @@ def get_top_picks(earnings_list=None):
                     score -= 12; signals.append(f"Negative press ({news_scan['count']} articles)")
                 elif net <= -1:
                     score -= 6; signals.append(f"Mixed/negative news")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Scoring signals for {ticker}: {e}")
 
         # Conviction level — requires BOTH strong signal count AND strong score
         score = min(max(round(score, 1), 0), 100)
@@ -756,7 +758,7 @@ def get_market_sentiment():
         for name, sym in SECTOR_ETFS.items():
             try:
                 prices = closes[sym].dropna() if sym in closes.columns else None
-                if prices is not None and len(prices) >= 2:
+                if prices is not None and len(prices) >= 2 and float(prices.iloc[-2]) > 0:
                     pct = ((float(prices.iloc[-1]) - float(prices.iloc[-2])) / float(prices.iloc[-2])) * 100
                     sectors.append({"name": name, "pct": round(pct, 2), "positive": pct >= 0})
             except Exception:
@@ -897,12 +899,12 @@ STOCK_UNIVERSE = [
     "BMY", "PFE", "GILD", "BIIB", "REGN", "VRTX", "MRNA", "HUM", "CVS",
     "CI", "HCA", "MOH", "CNC", "DVA", "VTRS", "ZTS", "IDXX", "ALGN",
     # S&P 500 — Financials
-    "BRK.B", "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW",
+    "BRK-B", "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW",
     "CB", "PGR", "TRV", "MET", "PRU", "AFL", "AIG", "ALL", "L", "LNC",
-    "GL", "UNM", "RE", "RNR", "WRB", "HIG", "CINF", "AIZ", "AMP", "IVZ",
-    "BEN", "TROW", "STT", "BK", "NTRS", "FI", "FIS", "GPN", "MA", "V",
+    "GL", "UNM", "RNR", "WRB", "HIG", "CINF", "AIZ", "AMP", "IVZ",
+    "BEN", "TROW", "STT", "BK", "NTRS", "FIS", "GPN", "MA", "V",
     "PYPL", "COF", "SYF", "BFH", "MTB", "USB", "PNC", "TFC",
-    "FITB", "HBAN", "CFG", "KEY", "RF", "ZION", "CMA",
+    "FITB", "HBAN", "CFG", "KEY", "RF", "ZION",
     "ALLY", "NDAQ", "ICE", "CME", "CBOE", "SPGI", "MCO", "MSCI",
     # S&P 500 — Industrials
     "GE", "HON", "RTX", "LMT", "NOC", "GD", "BA", "CAT", "DE", "EMR",
@@ -911,10 +913,10 @@ STOCK_UNIVERSE = [
     "WM", "RSG", "CTAS", "FAST", "GWW", "MSC", "CHRW", "EXPD", "UPS",
     "FDX", "DAL", "UAL", "AAL", "LUV", "ALK", "JBLU", "CSX", "NSC",
     "UNP", "CNI", "CP", "WAB", "ODFL", "XPO", "SAIA", "URI", "AGCO",
-    "TDG", "HEI", "TXT", "SPR", "AXON",
+    "TDG", "HEI", "TXT", "AXON",
     # S&P 500 — Energy
     "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY",
-    "HES", "DVN", "FANG", "APA", "HAL", "BKR", "KMI", "WMB",
+    "DVN", "FANG", "APA", "HAL", "BKR", "KMI", "WMB",
     "OKE", "LNG", "ET", "TRGP",
     # S&P 500 — Materials
     "LIN", "APD", "SHW", "ECL", "PPG", "EMN", "CE", "DD", "DOW", "LYB",
@@ -924,7 +926,7 @@ STOCK_UNIVERSE = [
     "AMT", "PLD", "CCI", "EQIX", "PSA", "DLR", "O", "VICI", "WPC",
     "SPG", "SLG", "BXP", "KIM", "REG", "AVB", "EQR", "MAA", "UDR",
     "CPT", "ESS", "HST", "PK", "SHO", "RHP", "INVH", "AMH", "CUBE",
-    "EXR", "LSI", "NSA", "VTR", "WELL", "HR", "HIW",
+    "EXR", "NSA", "VTR", "WELL", "HR", "HIW",
     # S&P 500 — Utilities
     "NEE", "SO", "DUK", "D", "SRE", "AEP", "EXC", "XEL", "WEC", "ES",
     "AWK", "CMS", "ETR", "LNT", "EVRG", "NI", "PNW", "AES", "NRG",
@@ -939,14 +941,14 @@ STOCK_UNIVERSE = [
     "AFRM", "OPEN", "PATH", "AI", "SOUN", "IONQ", "QUBT", "RGTI",
     "ACHR", "JOBY", "LUNR", "RKLB",
     # S&P 400 Mid-Cap — Tech
-    "FFIV", "JKHY", "MANH", "ALTR", "PCTY", "NCNO", "TOST", "ACAD",
-    "CVLT", "JAMF", "SPSC", "QTWO", "PRFT", "CGNX", "NOVT", "MKSI",
+    "FFIV", "JKHY", "MANH", "PCTY", "NCNO", "TOST", "ACAD",
+    "CVLT", "SPSC", "QTWO", "CGNX", "NOVT", "MKSI",
     "VECO", "COHU", "ONTO", "FORM", "ACLS", "AMBA", "SITM", "ALGM",
-    "RMBS", "POWI", "DIOD", "MTSI", "SLAB", "OSIS", "VIAV", "INFN",
-    "CALX", "ADTN", "EXTR", "CIEN", "LITE", "IIVI", "AAON", "ICHR",
+    "RMBS", "POWI", "DIOD", "MTSI", "SLAB", "OSIS", "VIAV",
+    "CALX", "ADTN", "EXTR", "CIEN", "LITE", "AAON", "ICHR",
     # S&P 400 Mid-Cap — Finance
-    "FHN", "WTFC", "SNV", "BOKF", "IBOC", "CVBF", "UMBF", "WSFS",
-    "FFIN", "GBCI", "HTLF", "EFSC", "BRKL", "SFNC", "NBTB", "CTBI",
+    "FHN", "WTFC", "BOKF", "IBOC", "CVBF", "UMBF", "WSFS",
+    "FFIN", "GBCI", "EFSC", "SFNC", "NBTB", "CTBI",
     "OFG", "HOPE", "BANR", "WAFD", "TCBK", "FIBK",
     "WBS", "PNFP", "TOWN", "RNST", "GSBC", "AROW",
     "EWBC", "IBCP", "NWBI", "EGBN", "CATY", "HAFC", "PFIS",
@@ -991,7 +993,7 @@ STOCK_UNIVERSE = [
     "ARHS", "MNKD", "AGEN", "IMVT", "VERA", "PRLD", "ELVN",
     "KROS", "IMCR", "RVMD", "ARDX", "FLNC", "ERII", "HASI",
     "ARRY", "MAXN", "RUN", "SPWR", "SHLS", "STEM", "EVGO",
-    "CHPT", "BLNK", "FSR", "GOEV", "WKHS", "AYRO",
+    "CHPT", "BLNK", "GOEV", "WKHS",
     "CLOV", "LMND", "ROOT", "DOMO", "BOX",
     "ASAN", "ALRM", "ARLO", "SONO",
     "EXPI", "HLNE", "STEP",
@@ -1005,7 +1007,7 @@ STOCK_UNIVERSE = [
     "APPN", "CNXC", "PLTK",
     "AMSF", "NTST", "PSTL", "LAND", "PINE",
     "GENI", "LESL", "SFIX",
-    "FIGS", "ONON", "CROX", "DECK", "SKX", "CATO",
+    "FIGS", "ONON", "CROX", "DECK", "CATO",
     "AEO", "ANF", "URBN", "TLYS", "ZUMZ", "BOOT",
     "HIMS", "ELF", "COTY",
     "PRTS", "CVNA", "VRM", "CPRT",
@@ -1088,16 +1090,16 @@ TICKER_SECTOR_MAP = {
     "MET": "Finance", "PRU": "Finance", "AFL": "Finance", "AIG": "Finance",
     "ALL": "Finance", "HIG": "Finance", "CINF": "Finance", "AIZ": "Finance",
     "AMP": "Finance", "IVZ": "Finance", "BEN": "Finance", "TROW": "Finance",
-    "STT": "Finance", "BK": "Finance", "NTRS": "Finance", "FI": "Finance",
+    "STT": "Finance", "BK": "Finance", "NTRS": "Finance",
     "FIS": "Finance", "GPN": "Finance", "MA": "Finance", "V": "Finance",
     "PYPL": "Finance", "COF": "Finance", "SYF": "Finance", "BFH": "Finance",
     "MTB": "Finance", "USB": "Finance", "PNC": "Finance", "TFC": "Finance",
     "FITB": "Finance", "HBAN": "Finance", "CFG": "Finance", "KEY": "Finance",
-    "RF": "Finance", "ZION": "Finance", "CMA": "Finance", "ALLY": "Finance",
+    "RF": "Finance", "ZION": "Finance", "ALLY": "Finance",
     "NDAQ": "Finance", "ICE": "Finance", "CME": "Finance", "CBOE": "Finance",
-    "SPGI": "Finance", "MCO": "Finance", "MSCI": "Finance", "BRK.B": "Finance",
+    "SPGI": "Finance", "MCO": "Finance", "MSCI": "Finance", "BRK-B": "Finance",
     "SOFI": "Finance", "NU": "Finance", "L": "Finance", "LNC": "Finance",
-    "GL": "Finance", "UNM": "Finance", "RE": "Finance", "RNR": "Finance",
+    "GL": "Finance", "UNM": "Finance", "RNR": "Finance",
     "WRB": "Finance",
     # Industrial
     "GE": "Industrial", "HON": "Industrial", "RTX": "Industrial", "LMT": "Industrial",
@@ -1113,12 +1115,12 @@ TICKER_SECTOR_MAP = {
     "ALK": "Industrial", "CSX": "Industrial", "NSC": "Industrial", "UNP": "Industrial",
     "WAB": "Industrial", "ODFL": "Industrial", "XPO": "Industrial", "SAIA": "Industrial",
     "URI": "Industrial", "AGCO": "Industrial", "TDG": "Industrial", "HEI": "Industrial",
-    "TXT": "Industrial", "SPR": "Industrial", "AXON": "Industrial",
+    "TXT": "Industrial", "AXON": "Industrial",
     "ACHR": "Industrial", "JOBY": "Industrial",
     # Energy
     "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "EOG": "Energy",
     "SLB": "Energy", "MPC": "Energy", "PSX": "Energy", "VLO": "Energy",
-    "OXY": "Energy", "PXD": "Energy", "HES": "Energy", "DVN": "Energy",
+    "OXY": "Energy", "PXD": "Energy", "DVN": "Energy",
     "FANG": "Energy", "APA": "Energy", "HAL": "Energy", "BKR": "Energy",
     "KMI": "Energy", "WMB": "Energy", "OKE": "Energy", "LNG": "Energy",
     "ET": "Energy", "TRGP": "Energy",
@@ -1185,7 +1187,7 @@ TICKER_SECTOR_MAP = {
     "MAXN": "Tech", "FLNC": "Tech", "STEM": "Tech", "AMPS": "Tech",
     # Consumer small caps
     "ONON": "Consumer", "BIRK": "Consumer", "CROX": "Consumer",
-    "DECK": "Consumer", "SKX": "Consumer", "FIGS": "Consumer",
+    "DECK": "Consumer", "FIGS": "Consumer",
     "AEO": "Consumer", "ANF": "Consumer", "URBN": "Consumer",
     "BOOT": "Consumer", "ELF": "Consumer", "COTY": "Consumer",
     "CVNA": "Consumer", "CPRT": "Consumer",
@@ -1262,7 +1264,7 @@ COMPANY_NAMES = {
     "PYPL": "PayPal", "COF": "Capital One", "SYF": "Synchrony",
     "USB": "U.S. Bancorp", "PNC": "PNC Financial", "TFC": "Truist",
     "NDAQ": "Nasdaq", "ICE": "ICE", "CME": "CME Group", "SPGI": "S&P Global",
-    "MCO": "Moody's", "MSCI": "MSCI", "BRK.B": "Berkshire Hathaway",
+    "MCO": "Moody's", "MSCI": "MSCI", "BRK-B": "Berkshire Hathaway",
     "SOFI": "SoFi", "ALLY": "Ally Financial",
     "GE": "GE Aerospace", "HON": "Honeywell", "RTX": "RTX Corp",
     "LMT": "Lockheed Martin", "NOC": "Northrop Grumman", "GD": "General Dynamics",
@@ -1277,7 +1279,7 @@ COMPANY_NAMES = {
     "XOM": "ExxonMobil", "CVX": "Chevron", "COP": "ConocoPhillips",
     "EOG": "EOG Resources", "SLB": "SLB", "MPC": "Marathon Petroleum",
     "PSX": "Phillips 66", "VLO": "Valero", "OXY": "Occidental",
-    "HES": "Hess", "DVN": "Devon Energy", "FANG": "Diamondback",
+    "DVN": "Devon Energy", "FANG": "Diamondback",
     "HAL": "Halliburton", "BKR": "Baker Hughes", "KMI": "Kinder Morgan",
     "WMB": "Williams Cos", "OKE": "ONEOK", "LNG": "Cheniere", "ET": "Energy Transfer",
     "LIN": "Linde", "APD": "Air Products", "SHW": "Sherwin-Williams",
@@ -1376,8 +1378,8 @@ def get_stock_list():
                         "sector": TICKER_SECTOR_MAP.get(ticker, "Other"),
                         "sparkline": sparkline,
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Stock list {ticker}: {e}")
         except Exception as e:
             logger.warning(f"get_stock_list chunk {chunk[:3]}: {e}")
         time.sleep(0.4)  # avoid rate limiting across chunks
@@ -1421,12 +1423,12 @@ def get_stock_detail(ticker):
             detail["week52_high"] = fi.fifty_two_week_high if hasattr(fi, "fifty_two_week_high") else None
             detail["week52_low"] = fi.fifty_two_week_low if hasattr(fi, "fifty_two_week_low") else None
             prev_close = fi.previous_close if hasattr(fi, "previous_close") else None
-            if detail["price"] and prev_close:
+            if detail["price"] and prev_close and prev_close > 0:
                 pct = ((detail["price"] - prev_close) / prev_close) * 100
                 detail["pct_change"] = round(pct, 2)
                 detail["positive"] = pct >= 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Stock detail fast_info for {ticker}: {e}")
 
         # Static name lookup as reliable fallback
         static_name = COMPANY_NAMES.get(ticker, "")
@@ -1449,8 +1451,8 @@ def get_stock_detail(ticker):
                 detail["week52_high"] = info.get("fiftyTwoWeekHigh")
             if not detail["week52_low"]:
                 detail["week52_low"] = info.get("fiftyTwoWeekLow")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Stock detail info for {ticker}: {e}")
 
         # Price from history as final fallback
         if not detail["price"]:

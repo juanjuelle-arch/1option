@@ -126,7 +126,11 @@ def login():
         if user and user.check_password(password):
             login_user(user)
             next_page = request.args.get("next")
+            # Prevent open redirect: only allow relative URLs
+            if next_page and (not next_page.startswith("/") or next_page.startswith("//")):
+                next_page = None
             return redirect(next_page or url_for("dashboard"))
+        logger.warning(f"Failed login attempt for {email} from {request.remote_addr}")
         flash("Invalid email or password.", "error")
     return render_template("login.html")
 
@@ -218,7 +222,8 @@ def stripe_webhook():
             if user:
                 user.is_subscribed = False
                 db.session.commit()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Webhook error from {request.remote_addr}: {e}")
         return jsonify({"error": "Webhook error"}), 400
     return jsonify({"status": "ok"})
 
@@ -286,6 +291,9 @@ def stock_detail(ticker):
         return redirect(url_for("pricing"))
     ticker = ticker.upper()
     detail = data_fetcher.get_stock_detail(ticker)
+    if not detail.get("price"):
+        flash(f"Ticker {ticker} not found or data unavailable.", "error")
+        return redirect(url_for("stocks"))
     news = cache.get("news") or []
     ticker_news = [a for a in news if ticker.lower() in a.get("title", "").lower()][:8]
     # Merge with ticker-specific news
