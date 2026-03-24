@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}429 — Too Many Requests{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card" style="text-align:center;">
+    <div style="font-size:64px; margin-bottom:16px;">429</div>
+    <h1 class="auth-title">Slow Down</h1>
+    <p class="auth-sub">You've made too many requests. Please wait a moment and try again.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top:24px;">Go Home</a>
+  </div>
+</div>
+{% endblock %}

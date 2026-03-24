@@ -6,8 +6,9 @@ Routes: landing, dashboard, auth, Stripe, API endpoints
 import os
 import re
 import logging
+from datetime import timedelta
 from urllib.parse import urlparse
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, abort
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, abort, send_from_directory, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
@@ -23,6 +24,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+IS_PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+
 # ─── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
@@ -34,7 +37,8 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no CSS/JS caching during dev
 # ─── Security Config ─────────────────────────────────────────────────────────
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-if os.environ.get("RAILWAY_ENVIRONMENT"):
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+if IS_PRODUCTION:
     app.config["SESSION_COOKIE_SECURE"] = True
 
 # CSRF protection
@@ -58,7 +62,17 @@ def add_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    if os.environ.get("RAILWAY_ENVIRONMENT"):
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' unpkg.com; "
+        "style-src 'self' 'unsafe-inline' fonts.googleapis.com; "
+        "font-src fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Prevent stale CSS/JS on the external proxy
     if request.path.startswith("/static/"):
@@ -133,8 +147,11 @@ def signup():
         if not name or not email or not password:
             flash("All fields are required.", "error")
             return render_template("signup.html")
-        if len(password) < 6:
-            flash("Password must be at least 6 characters.", "error")
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("signup.html")
+        if not re.search(r"[A-Za-z]", password) or not re.search(r"[0-9]", password):
+            flash("Password must contain both letters and numbers.", "error")
             return render_template("signup.html")
         if User.query.filter_by(email=email).first():
             flash("An account with that email already exists.", "error")
@@ -159,6 +176,7 @@ def login():
         user = User.query.filter_by(email=email).first()
         if user and user.check_password(password):
             login_user(user)
+            session.permanent = True
             next_page = request.args.get("next")
             # Prevent open redirect: validate with urlparse
             if next_page:
@@ -358,6 +376,28 @@ def api_stock_chart(ticker):
         period = "1mo"
     data = data_fetcher.get_stock_chart(ticker, period)
     return jsonify(data)
+
+
+# ─── Error Handlers ──────────────────────────────────────────────────────────
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template("errors/404.html"), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error(f"500 error: {e}")
+    return render_template("errors/500.html"), 500
+
+@app.errorhandler(429)
+def rate_limited(e):
+    return render_template("errors/429.html"), 429
+
+# ─── Static Security Files ──────────────────────────────────────────────────
+
+@app.route("/robots.txt")
+def robots():
+    return send_from_directory("static", "robots.txt")
 
 
 if __name__ == "__main__":

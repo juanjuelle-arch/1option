@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}500 — Server Error{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card" style="text-align:center;">
+    <div style="font-size:64px; margin-bottom:16px;">500</div>
+    <h1 class="auth-title">Something Went Wrong</h1>
+    <p class="auth-sub">We're working on it. Please try again in a moment.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top:24px;">Go Home</a>
+  </div>
+</div>
+{% endblock %}
