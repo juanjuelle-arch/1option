@@ -23,6 +23,10 @@ try:
 except ImportError:
     get_enriched_ticker_profile = None
     get_cboe_pc_ratio = None
+try:
+    from trending import get_trending_watchlist
+except ImportError:
+    get_trending_watchlist = None
 from scheduler import start_scheduler, refresh_main as refresh_all
 
 load_dotenv()
@@ -213,6 +217,7 @@ def dashboard():
     earnings = cache.get("earnings") or []
     top_calls = cache.get("top_calls") or []
     top_puts = cache.get("top_puts") or []
+    trending = cache.get("trending") or []
     return render_template("dashboard.html",
                            picks=picks,
                            news=news,
@@ -220,6 +225,7 @@ def dashboard():
                            earnings=earnings,
                            top_calls=top_calls,
                            top_puts=top_puts,
+                           trending=trending,
                            updated_at=cache.get_updated_at("picks"))
 
 # ─── Stripe ──────────────────────────────────────────────────────────────────
@@ -397,6 +403,21 @@ def api_vix():
     except Exception as e:
         logger.error(f"API VIX: {e}")
         return jsonify({"error": "Failed to fetch VIX"}), 500
+
+@app.route("/api/trending")
+@login_required
+def api_trending():
+    """Trending watchlist — tickers trending across multiple sources."""
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    trending = cache.get("trending") or []
+    if not trending and get_trending_watchlist:
+        try:
+            trending = get_trending_watchlist()
+            cache.set("trending", trending)
+        except Exception as e:
+            logger.error(f"API trending: {e}")
+    return jsonify({"trending": trending, "updated_at": cache.get_updated_at("trending")})
 
 # ─── Dev: grant free access for testing ──────────────────────────────────────
 

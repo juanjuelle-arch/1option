@@ -7,6 +7,11 @@ import cache
 import data_fetcher
 import logging
 
+try:
+    from trending import get_trending_watchlist
+except ImportError:
+    get_trending_watchlist = None
+
 logger = logging.getLogger(__name__)
 
 def refresh_main():
@@ -35,6 +40,14 @@ def refresh_main():
             logger.info(f"Options cached: {len(top_calls)} calls, {len(top_puts)} puts")
         except Exception as e:
             logger.error(f"Options refresh failed (non-blocking): {e}")
+
+        try:
+            if get_trending_watchlist:
+                trending = get_trending_watchlist()
+                cache.set("trending", trending)
+                logger.info(f"Trending cached: {len(trending)} tickers")
+        except Exception as e:
+            logger.error(f"Trending refresh failed (non-blocking): {e}")
 
         logger.info("Main cache refresh complete.")
     except Exception as e:
