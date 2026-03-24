@@ -272,16 +272,161 @@ def detect_unusual_options(calls_df, puts_df, current_price):
 
 # ─── Options Data ────────────────────────────────────────────────────────────
 
+def _score_option(row, current_price, kind):
+    """
+    Wall-Street-grade option scoring.
+    Evaluates each contract on 6 dimensions a professional trader cares about:
+      1. Moneyness   — slightly OTM (2-8%) is the sweet spot for risk/reward
+      2. Liquidity    — tight bid/ask spread, high volume + open interest
+      3. Volume/OI    — ratio > 1 = fresh money flowing in (institutional signal)
+      4. IV value     — moderate IV preferred (not overpriced, not dead)
+      5. Notional     — bigger dollar flow = institutional conviction
+      6. Premium      — filter out penny options and overpriced ones
+    """
+    try:
+        strike = float(row.get("strike", 0) or 0)
+        volume = float(row.get("volume", 0) or 0)
+        oi     = float(row.get("openInterest", 0) or 0)
+        last   = float(row.get("lastPrice", 0) or 0)
+        bid    = float(row.get("bid", 0) or 0)
+        ask    = float(row.get("ask", 0) or 0)
+        iv     = float(row.get("impliedVolatility", 0) or 0)
+
+        if current_price <= 0 or strike <= 0 or last <= 0:
+            return -999
+
+        # ── 1. Moneyness (0-30 pts) ─────────────────────────────────────
+        # Sweet spot: slightly OTM (2-8% from current price)
+        if kind == "CALL":
+            otm_pct = (strike - current_price) / current_price * 100
+        else:
+            otm_pct = (current_price - strike) / current_price * 100
+
+        if -2 <= otm_pct <= 2:        # Near ATM — good for high-probability
+            moneyness_score = 25
+        elif 2 < otm_pct <= 5:        # Slightly OTM — best risk/reward
+            moneyness_score = 30
+        elif 5 < otm_pct <= 10:       # Moderately OTM — still tradeable
+            moneyness_score = 18
+        elif 10 < otm_pct <= 15:      # Far OTM — speculative but acceptable
+            moneyness_score = 8
+        elif -5 <= otm_pct < -2:      # Slightly ITM — good for safer plays
+            moneyness_score = 22
+        elif otm_pct > 15 or otm_pct < -10:
+            moneyness_score = 0        # Too far — skip
+        else:
+            moneyness_score = 5
+
+        # ── 2. Liquidity (0-25 pts) ──────────────────────────────────────
+        # Volume + OI + tight spread = easy to enter/exit
+        liq_score = 0
+        if volume >= 500:
+            liq_score += 10
+        elif volume >= 100:
+            liq_score += 6
+        elif volume >= 25:
+            liq_score += 2
+
+        if oi >= 1000:
+            liq_score += 8
+        elif oi >= 200:
+            liq_score += 4
+        elif oi >= 50:
+            liq_score += 1
+
+        # Bid-ask spread as % of mid price (tighter = better)
+        if bid > 0 and ask > 0:
+            mid = (bid + ask) / 2
+            spread_pct = (ask - bid) / mid * 100 if mid > 0 else 100
+            if spread_pct <= 3:
+                liq_score += 7     # Very tight — institutional-grade
+            elif spread_pct <= 8:
+                liq_score += 4
+            elif spread_pct <= 15:
+                liq_score += 1
+
+        # ── 3. Volume/OI ratio (0-20 pts) ────────────────────────────────
+        # Vol/OI > 1 = new positions being opened (smart money signal)
+        vol_oi = volume / oi if oi > 0 else 0
+        if vol_oi >= 3.0:
+            voi_score = 20         # Massive fresh flow — very unusual
+        elif vol_oi >= 1.5:
+            voi_score = 15         # Strong fresh positioning
+        elif vol_oi >= 0.8:
+            voi_score = 8          # Decent activity
+        elif vol_oi >= 0.3:
+            voi_score = 3
+        else:
+            voi_score = 0
+
+        # ── 4. IV value (0-10 pts) ───────────────────────────────────────
+        # Moderate IV = not overpriced. Too low = dead stock. Too high = expensive.
+        iv_pct = iv * 100
+        if 20 <= iv_pct <= 50:
+            iv_score = 10          # Sweet spot
+        elif 50 < iv_pct <= 80:
+            iv_score = 6           # Elevated but ok for momentum plays
+        elif 15 <= iv_pct < 20:
+            iv_score = 5
+        elif iv_pct > 80:
+            iv_score = 2           # Very expensive premium
+        else:
+            iv_score = 0
+
+        # ── 5. Notional value (0-10 pts) ─────────────────────────────────
+        # Bigger $ flow = more institutional conviction
+        notional = volume * last * 100
+        if notional >= 5_000_000:
+            not_score = 10
+        elif notional >= 1_000_000:
+            not_score = 7
+        elif notional >= 250_000:
+            not_score = 4
+        elif notional >= 50_000:
+            not_score = 1
+        else:
+            not_score = 0
+
+        # ── 6. Premium filter (0-5 pts) ──────────────────────────────────
+        # Filter out penny options (< $0.10) and extreme prices
+        prem_pct = last / current_price * 100
+        if 0.5 <= prem_pct <= 8:
+            prem_score = 5         # Reasonable premium range
+        elif 0.2 <= prem_pct < 0.5 or 8 < prem_pct <= 15:
+            prem_score = 2
+        else:
+            prem_score = 0
+
+        # Hard filters — disqualify bad contracts
+        if last < 0.10:
+            return -999            # Penny option — untradeable
+        if volume < 10:
+            return -999            # No liquidity
+        if otm_pct > 20:
+            return -999            # Way too far OTM
+
+        total = moneyness_score + liq_score + voi_score + iv_score + not_score + prem_score
+        return total
+
+    except Exception:
+        return -999
+
+
 def get_options_data(ticker):
+    """
+    Fetch options chain and select the best contracts using professional-grade
+    scoring: moneyness, liquidity, vol/OI flow, IV, notional, premium quality.
+    """
     try:
         t = yf.Ticker(ticker)
         exps = t.options
         if not exps:
             return None
-        # Use first 2 expiries for broader unusual activity scan
+
+        # Use first 3 expiries for better selection (1-4 weeks out typically)
         all_calls = pd.DataFrame()
         all_puts  = pd.DataFrame()
-        for exp in exps[:2]:
+        for exp in exps[:3]:
             try:
                 chain = t.option_chain(exp)
                 c = chain.calls.copy(); c["expiry"] = exp
@@ -289,7 +434,7 @@ def get_options_data(ticker):
                 all_calls = pd.concat([all_calls, c], ignore_index=True)
                 all_puts  = pd.concat([all_puts,  p], ignore_index=True)
             except Exception:
-                pass
+                logger.debug(f"Options chain {ticker} {exp}: failed")
 
         if all_calls.empty and all_puts.empty:
             return None
@@ -298,12 +443,13 @@ def get_options_data(ticker):
         total_puts  = int(all_puts["volume"].fillna(0).sum())
         cp_ratio = round(total_puts / total_calls, 2) if total_calls > 0 else None
 
-        # Detect unusual activity
+        # Get current price for moneyness calculation
         current_price = 0
         try:
             current_price = float(t.fast_info.last_price or 0)
         except Exception:
             pass
+
         unusual_calls, unusual_puts = detect_unusual_options(all_calls, all_puts, current_price)
 
         def fmt(row, kind):
@@ -316,10 +462,38 @@ def get_options_data(ticker):
                 "open_interest": int(row["openInterest"]) if not pd.isna(row["openInterest"]) else 0,
                 "iv": round(float(row["impliedVolatility"]) * 100, 1) if not pd.isna(row["impliedVolatility"]) else 0,
                 "last_price": round(float(row["lastPrice"]), 2) if not pd.isna(row["lastPrice"]) else 0,
+                "bid": round(float(row.get("bid", 0) or 0), 2),
+                "ask": round(float(row.get("ask", 0) or 0), 2),
             }
 
-        top_calls = [fmt(r, "CALL") for _, r in all_calls.dropna(subset=["volume"]).sort_values("volume", ascending=False).head(5).iterrows()]
-        top_puts  = [fmt(r, "PUT")  for _, r in all_puts.dropna(subset=["volume"]).sort_values("volume", ascending=False).head(5).iterrows()]
+        # ── Score and rank calls ─────────────────────────────────────────
+        if not all_calls.empty and current_price > 0:
+            all_calls["_score"] = all_calls.apply(
+                lambda r: _score_option(r, current_price, "CALL"), axis=1
+            )
+            best_calls = all_calls[all_calls["_score"] > 0].sort_values(
+                "_score", ascending=False
+            ).head(5)
+            top_calls = [fmt(r, "CALL") for _, r in best_calls.iterrows()]
+        else:
+            # Fallback to volume sort if no price data
+            top_calls = [fmt(r, "CALL") for _, r in all_calls.dropna(
+                subset=["volume"]).sort_values("volume", ascending=False
+            ).head(5).iterrows()]
+
+        # ── Score and rank puts ──────────────────────────────────────────
+        if not all_puts.empty and current_price > 0:
+            all_puts["_score"] = all_puts.apply(
+                lambda r: _score_option(r, current_price, "PUT"), axis=1
+            )
+            best_puts = all_puts[all_puts["_score"] > 0].sort_values(
+                "_score", ascending=False
+            ).head(5)
+            top_puts = [fmt(r, "PUT") for _, r in best_puts.iterrows()]
+        else:
+            top_puts = [fmt(r, "PUT") for _, r in all_puts.dropna(
+                subset=["volume"]).sort_values("volume", ascending=False
+            ).head(5).iterrows()]
 
         return {
             "total_calls": total_calls, "total_puts": total_puts,
@@ -653,14 +827,27 @@ def get_top_picks(earnings_list=None):
 # ─── Global Top Calls & Puts ─────────────────────────────────────────────────
 
 def get_global_top_options():
+    """
+    Aggregate best options across top tickers. Options are already
+    professionally scored by _score_option inside get_options_data,
+    so we rank the aggregated pool by a composite of notional flow
+    (volume × price × 100) and liquidity (volume + OI).
+    """
     all_calls, all_puts = [], []
     for ticker in WATCHLIST[:12]:
         opts = get_options_data(ticker)
         if opts:
             all_calls.extend(opts["top_calls"])
             all_puts.extend(opts["top_puts"])
-    all_calls.sort(key=lambda x: x["volume"], reverse=True)
-    all_puts.sort(key=lambda x: x["volume"], reverse=True)
+
+    def _rank(opt):
+        """Rank by notional value (institutional conviction) + liquidity."""
+        notional = opt["volume"] * opt["last_price"] * 100
+        liquidity = opt["volume"] + opt.get("open_interest", 0)
+        return notional * 0.7 + liquidity * 0.3
+
+    all_calls.sort(key=_rank, reverse=True)
+    all_puts.sort(key=_rank, reverse=True)
     return all_calls[:5], all_puts[:5]
 
 
