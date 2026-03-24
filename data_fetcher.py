@@ -4,6 +4,7 @@ Sources: Yahoo Finance (yfinance + screener API), RSS news feeds
 Optimized: batch downloads, screener-first approach for speed
 """
 
+import re
 import yfinance as yf
 import feedparser
 import requests
@@ -170,6 +171,8 @@ def get_technical_signals_from_history(hist):
 def get_finviz_data(ticker):
     """Scrape Finviz for analyst recommendation, target price, short float, insider activity."""
     try:
+        if not re.match(r"^[A-Z0-9]{1,5}(-[A-Z])?$", ticker.upper()):
+            return {}
         url = f"https://finviz.com/quote.ashx?t={ticker}&p=d"
         r = requests.get(url, headers=HEADERS, timeout=8)
         if r.status_code != 200:
