@@ -251,52 +251,61 @@
         </div>
       </div>
 
-      <!-- Beginner tip -->
-      <p style="color:var(--text-dim); font-size:11px; margin-bottom:10px; line-height:1.4;">
-        📘 Call/Put Price = cost per share · Contract = price × 100 shares
-      </p>
-
       <div id="tab-calls" class="tab-pane">
-        <div class="opt-table-scroll">
-          <table class="options-table">
-            <thead>
-              <tr><th>Ticker</th><th>Type</th><th>Call Price</th><th>Cost / Contract</th><th>Expires</th><th>Volume</th></tr>
-            </thead>
-            <tbody>
-              {% for c in top_calls %}
-              <tr class="calls-row">
-                <td><strong class="pos">{{ c.ticker }}</strong></td>
-                <td><span style="background:rgba(0,212,170,0.15); color:var(--green); padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700;">CALL</span></td>
-                <td><strong>${{ "%.2f"|format(c.last_price) }}</strong></td>
-                <td style="color:var(--yellow);">${{ "{:,.0f}".format(c.last_price * 100) }}</td>
-                <td>{{ c.expiry }}</td>
-                <td>{{ "{:,}".format(c.volume) }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:10px;">
+          {% for c in top_calls %}
+          <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--green); transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--card-border)'; this.style.borderLeftColor='var(--green)'">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:14px;">{{ c.ticker }} <span style="color:var(--green);">${{ "%.0f"|format(c.strike) }} Call</span></span>
+            </div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Call Price</div>
+            <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green);">${{ "%.2f"|format(c.last_price) }}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">per share</div>
+            <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+              <div>
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Total Cost</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">${{ "{:,.0f}".format(c.last_price * 100) }}</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Volume</div>
+                <div style="font-size:13px; font-weight:600;">{{ "{:,}".format(c.volume) }}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+                <div style="font-size:13px; font-weight:600;">{{ c.expiry }}</div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
         </div>
       </div>
 
       <div id="tab-puts" class="tab-pane" style="display:none">
-        <div class="opt-table-scroll">
-          <table class="options-table">
-            <thead>
-              <tr><th>Ticker</th><th>Type</th><th>Put Price</th><th>Cost / Contract</th><th>Expires</th><th>Volume</th></tr>
-            </thead>
-            <tbody>
-              {% for p in top_puts %}
-              <tr class="puts-row">
-                <td><strong class="neg">{{ p.ticker }}</strong></td>
-                <td><span style="background:rgba(255,51,102,0.15); color:var(--red); padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700;">PUT</span></td>
-                <td><strong>${{ "%.2f"|format(p.last_price) }}</strong></td>
-                <td style="color:var(--yellow);">${{ "{:,.0f}".format(p.last_price * 100) }}</td>
-                <td>{{ p.expiry }}</td>
-                <td>{{ "{:,}".format(p.volume) }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:10px;">
+          {% for p in top_puts %}
+          <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid var(--red); transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--card-border)'; this.style.borderLeftColor='var(--red)'">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:14px;">{{ p.ticker }} <span style="color:var(--red);">${{ "%.0f"|format(p.strike) }} Put</span></span>
+            </div>
+            <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Put Price</div>
+            <div style="font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--red);">${{ "%.2f"|format(p.last_price) }}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">per share</div>
+            <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--card-border);">
+              <div>
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Total Cost</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">${{ "{:,.0f}".format(p.last_price * 100) }}</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Volume</div>
+                <div style="font-size:13px; font-weight:600;">{{ "{:,}".format(p.volume) }}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
+                <div style="font-size:13px; font-weight:600;">{{ p.expiry }}</div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
         </div>
       </div>
     </div>
