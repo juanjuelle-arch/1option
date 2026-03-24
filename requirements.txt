@@ -1,6 +1,8 @@
 flask
 flask-login
 flask-sqlalchemy
+flask-wtf
+flask-limiter
 yfinance
 feedparser
 requests

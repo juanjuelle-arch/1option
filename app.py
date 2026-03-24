@@ -4,9 +4,14 @@ Routes: landing, dashboard, auth, Stripe, API endpoints
 """
 
 import os
+import re
 import logging
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session
+from urllib.parse import urlparse
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 import stripe
 import cache
@@ -21,13 +26,40 @@ logger = logging.getLogger(__name__)
 # ─── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "stockpulse-dev-secret-2024-change-in-prod")
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///stockpulse.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no CSS/JS caching during dev
 
+# ─── Security Config ─────────────────────────────────────────────────────────
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+if os.environ.get("RAILWAY_ENVIRONMENT"):
+    app.config["SESSION_COOKIE_SECURE"] = True
+
+# CSRF protection
+csrf = CSRFProtect(app)
+
+# Rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "60 per hour"],
+    storage_uri="memory://",
+)
+
+# Ticker validation pattern: 1-5 alphanumeric chars, optional -X suffix (e.g. BRK-B)
+TICKER_RE = re.compile(r"^[A-Z0-9]{1,5}(-[A-Z])?$")
+VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "5y"}
+
 @app.after_request
 def add_headers(response):
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if os.environ.get("RAILWAY_ENVIRONMENT"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Prevent stale CSS/JS on the external proxy
     if request.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
@@ -90,6 +122,7 @@ def pricing():
 # ─── Auth Routes ─────────────────────────────────────────────────────────────
 
 @app.route("/signup", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def signup():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
@@ -116,6 +149,7 @@ def signup():
     return render_template("signup.html")
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
@@ -126,9 +160,11 @@ def login():
         if user and user.check_password(password):
             login_user(user)
             next_page = request.args.get("next")
-            # Prevent open redirect: only allow relative URLs
-            if next_page and (not next_page.startswith("/") or next_page.startswith("//")):
-                next_page = None
+            # Prevent open redirect: validate with urlparse
+            if next_page:
+                parsed = urlparse(next_page)
+                if parsed.netloc or parsed.scheme or next_page.startswith("//"):
+                    next_page = None
             return redirect(next_page or url_for("dashboard"))
         logger.warning(f"Failed login attempt for {email} from {request.remote_addr}")
         flash("Invalid email or password.", "error")
@@ -211,6 +247,7 @@ def payment_success():
     return redirect(url_for("dashboard"))
 
 @app.route("/webhook", methods=["POST"])
+@csrf.exempt
 def stripe_webhook():
     payload = request.data
     sig_header = request.headers.get("Stripe-Signature")
@@ -263,12 +300,16 @@ def dev_activate():
     return redirect(url_for("index"))
 
 @app.route("/demo-access")
+@limiter.limit("3 per minute")
 def demo_access():
-    """Direct demo access — auto-login as subscribed demo user."""
+    """Direct demo access — requires DEMO_TOKEN env var or debug mode."""
+    demo_token = os.environ.get("DEMO_TOKEN", "")
+    if not app.debug and (not demo_token or request.args.get("token") != demo_token):
+        abort(404)
     user = User.query.filter_by(email='demo@stockpulse.com').first()
     if not user:
         user = User(email='demo@stockpulse.com', name='Demo User', is_subscribed=True)
-        user.set_password('demo1234')
+        user.set_password(os.urandom(16).hex())
         db.session.add(user)
         db.session.commit()
     login_user(user)
@@ -290,6 +331,9 @@ def stock_detail(ticker):
     if not current_user.is_subscribed:
         return redirect(url_for("pricing"))
     ticker = ticker.upper()
+    if not TICKER_RE.match(ticker):
+        flash("Invalid ticker format.", "error")
+        return redirect(url_for("stocks"))
     detail = data_fetcher.get_stock_detail(ticker)
     if not detail.get("price"):
         flash(f"Ticker {ticker} not found or data unavailable.", "error")
@@ -306,11 +350,17 @@ def stock_detail(ticker):
 def api_stock_chart(ticker):
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
+    ticker = ticker.upper()
+    if not TICKER_RE.match(ticker):
+        return jsonify({"error": "Invalid ticker"}), 400
     period = request.args.get("period", "1mo")
-    data = data_fetcher.get_stock_chart(ticker.upper(), period)
+    if period not in VALID_PERIODS:
+        period = "1mo"
+    data = data_fetcher.get_stock_chart(ticker, period)
     return jsonify(data)
 
 
 if __name__ == "__main__":
+    debug = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
     port = int(os.environ.get("PORT", 8080))
-    app.run(debug=True, port=port)
+    app.run(debug=debug, port=port)
