@@ -28,9 +28,13 @@ def refresh_main():
         picks = data_fetcher.get_top_picks(earnings)
         cache.set("picks", picks)
 
-        top_calls, top_puts = data_fetcher.get_global_top_options()
-        cache.set("top_calls", top_calls)
-        cache.set("top_puts", top_puts)
+        try:
+            top_calls, top_puts = data_fetcher.get_global_top_options()
+            cache.set("top_calls", top_calls)
+            cache.set("top_puts", top_puts)
+            logger.info(f"Options cached: {len(top_calls)} calls, {len(top_puts)} puts")
+        except Exception as e:
+            logger.error(f"Options refresh failed (non-blocking): {e}")
 
         logger.info("Main cache refresh complete.")
     except Exception as e:

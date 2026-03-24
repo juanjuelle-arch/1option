@@ -433,10 +433,11 @@ def _score_option(row, current_price, kind, intel_score=50):
         return -999
 
 
-def get_options_data(ticker):
+def get_options_data(ticker, use_intel=True):
     """
     Fetch options chain and select the best contracts using professional-grade
     scoring: moneyness, liquidity, vol/OI flow, IV, notional, premium quality.
+    Set use_intel=False for faster scans (skips multi-source scraper).
     """
     try:
         t = yf.Ticker(ticker)
@@ -476,7 +477,7 @@ def get_options_data(ticker):
         # ── Fetch multi-source intelligence for smarter scoring ──────
         intel_score = 50  # neutral default
         intel_profile = {}
-        if get_enriched_ticker_profile is not None:
+        if use_intel and get_enriched_ticker_profile is not None:
             try:
                 intel_profile = get_enriched_ticker_profile(ticker)
                 intel_score = intel_profile.get("intel_score", 50)
@@ -861,31 +862,22 @@ def get_top_picks(earnings_list=None):
 def get_global_top_options():
     """
     Aggregate the single best call and put from EACH ticker across the
-    full watchlist, then rank the pool. This ensures diversity — no single
-    ticker can dominate the board.
+    top 20 watchlist tickers, then rank the pool. Uses fast mode (no
+    multi-source scraper) to keep scheduler fast.
 
-    Scans all 34 watchlist tickers + any cached top picks tickers.
     Max 1 call + 1 put per ticker shown in the final top 5.
     """
     all_calls, all_puts = [], []
 
-    # Scan the full watchlist for maximum coverage
-    scan_tickers = list(WATCHLIST)
-
-    # Also include any tickers from cached top picks that aren't in watchlist
-    try:
-        from cache import get_cached
-        cached_picks = get_cached("top_picks")
-        if cached_picks:
-            for pick in cached_picks:
-                t = pick.get("ticker")
-                if t and t not in scan_tickers:
-                    scan_tickers.append(t)
-    except Exception:
-        pass
+    # Top 20 most active tickers — fast scan without intel scraper
+    scan_tickers = list(WATCHLIST[:20])
 
     for ticker in scan_tickers:
-        opts = get_options_data(ticker)
+        try:
+            opts = get_options_data(ticker, use_intel=False)
+        except Exception as e:
+            logger.debug(f"Global options {ticker}: {e}")
+            continue
         if not opts:
             continue
         # Take only the BEST call and BEST put per ticker (already scored & sorted)

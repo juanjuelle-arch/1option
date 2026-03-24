@@ -18,6 +18,11 @@ import stripe
 import cache
 import data_fetcher
 from models import db, User
+try:
+    from market_scraper import get_enriched_ticker_profile, get_cboe_pc_ratio
+except ImportError:
+    get_enriched_ticker_profile = None
+    get_cboe_pc_ratio = None
 from scheduler import start_scheduler, refresh_main as refresh_all
 
 load_dotenv()
@@ -304,6 +309,94 @@ def api_sentiment():
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     return jsonify(cache.get("sentiment") or {})
+
+# ─── Options & Intelligence APIs ─────────────────────────────────────────────
+
+@app.route("/api/options")
+@login_required
+def api_options_global():
+    """Top calls & puts across all tickers — diversified, scored."""
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    try:
+        top_calls, top_puts = data_fetcher.get_global_top_options()
+        market_data = {}
+        if get_cboe_pc_ratio:
+            market_data = get_cboe_pc_ratio()
+        return jsonify({
+            "top_calls": top_calls,
+            "top_puts": top_puts,
+            "market": {
+                "vix": market_data.get("vix"),
+                "put_call_ratio": market_data.get("total_pc"),
+            },
+            "updated_at": cache.get_updated_at("picks"),
+        })
+    except Exception as e:
+        logger.error(f"API options: {e}")
+        return jsonify({"error": "Failed to fetch options"}), 500
+
+@app.route("/api/options/<ticker>")
+@login_required
+def api_options_ticker(ticker):
+    """Full options chain for a specific ticker — scored & ranked."""
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    ticker = ticker.upper()
+    if not TICKER_RE.match(ticker):
+        return jsonify({"error": "Invalid ticker"}), 400
+    try:
+        opts = data_fetcher.get_options_data(ticker)
+        if not opts:
+            return jsonify({"error": f"No options data for {ticker}"}), 404
+        return jsonify({
+            "ticker": ticker,
+            "total_calls": opts["total_calls"],
+            "total_puts": opts["total_puts"],
+            "put_call_ratio": opts["cp_ratio"],
+            "top_calls": opts["top_calls"],
+            "top_puts": opts["top_puts"],
+            "unusual_calls": opts.get("unusual_calls", []),
+            "unusual_puts": opts.get("unusual_puts", []),
+            "nearest_expiry": opts["expiry"],
+        })
+    except Exception as e:
+        logger.error(f"API options {ticker}: {e}")
+        return jsonify({"error": "Failed to fetch options"}), 500
+
+@app.route("/api/intel/<ticker>")
+@login_required
+def api_intel_ticker(ticker):
+    """
+    Full multi-source intelligence profile for a ticker.
+    Sources: Yahoo Finance, Finviz, Stockanalysis, Barchart,
+    EarningsWhispers, CBOE.
+    """
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    ticker = ticker.upper()
+    if not TICKER_RE.match(ticker):
+        return jsonify({"error": "Invalid ticker"}), 400
+    if not get_enriched_ticker_profile:
+        return jsonify({"error": "Intelligence module not available"}), 503
+    try:
+        profile = get_enriched_ticker_profile(ticker)
+        return jsonify(profile)
+    except Exception as e:
+        logger.error(f"API intel {ticker}: {e}")
+        return jsonify({"error": "Failed to fetch intelligence"}), 500
+
+@app.route("/api/market/vix")
+def api_vix():
+    """Public VIX + market-wide put/call ratio."""
+    try:
+        if get_cboe_pc_ratio:
+            data = get_cboe_pc_ratio()
+            return jsonify(data)
+        return jsonify({"error": "CBOE module not available"}), 503
+    except Exception as e:
+        logger.error(f"API VIX: {e}")
+        return jsonify({"error": "Failed to fetch VIX"}), 500
 
 # ─── Dev: grant free access for testing ──────────────────────────────────────
 
