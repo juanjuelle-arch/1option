@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="1.OPTION — Real-time options intelligence, stock picks, technical signals, and market sentiment. One source for smarter trading decisions.">
+  <meta property="og:title" content="1.OPTION — Options Intelligence">
+  <meta property="og:description" content="Real-time stock picks, options flow data, technical signals, and market sentiment in one dashboard.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0f'/%3E%3Ctext x='50%25' y='55%25' font-family='monospace' font-size='20' font-weight='bold' fill='%2300d4aa' text-anchor='middle' dominant-baseline='middle'%3E1.%3C/text%3E%3C/svg%3E">
   <title>{% block title %}1.OPTION — Options Intelligence{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,6 +47,9 @@
 <!-- Navigation -->
 <nav class="navbar">
   <a href="{{ url_for('index') }}" class="logo">1.OPTION</a>
+  <button class="nav-hamburger" id="navToggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
   <div class="nav-links">
     <a href="{{ url_for('index') }}">Home</a>
     {% if current_user.is_authenticated %}
@@ -82,8 +91,13 @@
     </div>
     <div class="footer-links">
       <a href="{{ url_for('pricing') }}">Pricing</a>
-      <a href="{{ url_for('login') }}">Login</a>
-      <a href="{{ url_for('signup') }}">Sign Up</a>
+      {% if current_user.is_authenticated %}
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Login</a>
+        <a href="{{ url_for('signup') }}">Sign Up</a>
+      {% endif %}
     </div>
     <p class="footer-disclaimer">
       1.OPTION is for informational purposes only. Not financial advice.

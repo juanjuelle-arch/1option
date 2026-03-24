@@ -13,7 +13,7 @@
       {% if stocks|length > 0 %}
         {{ stocks|length }} stocks — click any card for full chart &amp; detail
       {% else %}
-        Fetching live market data… <span style="color:var(--green);">refresh in ~2 min</span>
+        <span class="loading-pulse">Fetching live market data… refresh in ~2 min</span>
       {% endif %}
     </p>
 

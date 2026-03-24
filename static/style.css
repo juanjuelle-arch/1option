@@ -119,6 +119,25 @@ h3 { font-size: 1rem; }
 .nav-links a:hover, .nav-links a.active { color: var(--text); }
 .nav-user { color: var(--text-sub); font-size: 12px; }
 
+/* Hamburger (hidden on desktop) */
+.nav-hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+.nav-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text-sub);
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
 /* ─── Buttons ───────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -636,7 +655,7 @@ h3 { font-size: 1rem; }
 .cv-score {
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--green);
   font-family: 'JetBrains Mono', monospace;
 }
 
@@ -871,7 +890,21 @@ h3 { font-size: 1rem; }
   .hero-stats { gap: 24px; }
   .picks-grid { grid-template-columns: 1fr; }
   .navbar { padding: 0 16px; }
-  .nav-links { gap: 12px; }
+  .nav-hamburger { display: flex; }
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 60px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    background: var(--bg);
+    border-bottom: 1px solid var(--card-border);
+    padding: 16px 24px;
+    gap: 16px;
+    z-index: 98;
+  }
+  .nav-links.open { display: flex; }
   .market-pulse-panel { grid-template-columns: 1fr; }
   .et-row { grid-template-columns: 80px 60px 1fr; }
   .et-eps, .et-sector { display: none; }
@@ -942,3 +975,7 @@ h3 { font-size: 1rem; }
 .stat-box { background:var(--card); border:1px solid var(--card-border); border-radius:8px; padding:14px 16px; }
 .stat-box-label { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:4px; }
 .stat-box-value { font-size:18px; font-weight:700; color:var(--text); font-family:'JetBrains Mono',monospace; }
+
+/* ─── Loading Pulse ──────────────────────────────────────────────────────── */
+@keyframes pulse-dim { 0%,100%{opacity:0.5} 50%{opacity:1} }
+.loading-pulse { animation: pulse-dim 1.5s ease-in-out infinite; }

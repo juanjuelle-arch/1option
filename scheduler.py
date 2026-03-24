@@ -1,5 +1,5 @@
 """
-scheduler.py — APScheduler background jobs to refresh data cache every 5 minutes.
+scheduler.py — APScheduler background jobs to refresh data cache every 2 minutes.
 """
 
 from apscheduler.schedulers.background import BackgroundScheduler

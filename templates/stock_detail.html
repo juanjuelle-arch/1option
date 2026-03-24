@@ -141,31 +141,31 @@
       {% set sig = detail.signals %}
       <!-- RSI -->
       <span class="signal-pill
-        {% if sig.rsi_signal == 'Oversold' %}signal-bullish
-        {% elif sig.rsi_signal == 'Overbought' %}signal-bearish
-        {% else %}signal-neutral{% endif %}">
+        {% if sig.rsi_signal == 'Oversold' %}pill-bullish
+        {% elif sig.rsi_signal == 'Overbought' %}pill-bearish
+        {% else %}pill-neutral{% endif %}">
         RSI {{ "%.0f"|format(sig.rsi) if sig.rsi else '—' }} · {{ sig.rsi_signal }}
       </span>
       <!-- MACD -->
       <span class="signal-pill
-        {% if 'Bullish' in sig.macd_signal %}signal-bullish
-        {% elif 'Bearish' in sig.macd_signal %}signal-bearish
-        {% else %}signal-neutral{% endif %}">
+        {% if 'Bullish' in sig.macd_signal %}pill-bullish
+        {% elif 'Bearish' in sig.macd_signal %}pill-bearish
+        {% else %}pill-neutral{% endif %}">
         MACD · {{ sig.macd_signal }}
       </span>
       <!-- MA -->
       <span class="signal-pill
-        {% if 'Golden' in sig.ma_signal %}signal-bullish
-        {% elif 'Death' in sig.ma_signal %}signal-bearish
-        {% else %}signal-neutral{% endif %}">
+        {% if 'Golden' in sig.ma_signal %}pill-bullish
+        {% elif 'Death' in sig.ma_signal %}pill-bearish
+        {% else %}pill-neutral{% endif %}">
         MA · {{ sig.ma_signal }}
       </span>
       <!-- Finviz analyst -->
       {% if detail.finviz and detail.finviz.analyst_recom %}
       <span class="signal-pill
-        {% if detail.finviz.analyst_recom <= 2.0 %}signal-bullish
-        {% elif detail.finviz.analyst_recom >= 3.5 %}signal-bearish
-        {% else %}signal-neutral{% endif %}">
+        {% if detail.finviz.analyst_recom <= 2.0 %}pill-bullish
+        {% elif detail.finviz.analyst_recom >= 3.5 %}pill-bearish
+        {% else %}pill-neutral{% endif %}">
         Analyst {{ "%.1f"|format(detail.finviz.analyst_recom) }}/5
       </span>
       {% endif %}
@@ -226,7 +226,7 @@
       {% if opts.top_calls %}
       <table style="width:100%; border-collapse:collapse; font-size:13px;">
         <thead>
-          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--border);">
+          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--card-border);">
             <th style="padding:6px 10px;">Strike</th>
             <th style="padding:6px 10px;">Expiry</th>
             <th style="padding:6px 10px;">Volume</th>
@@ -237,7 +237,7 @@
         </thead>
         <tbody>
           {% for c in opts.top_calls %}
-          <tr style="border-bottom:1px solid var(--border)22;">
+          <tr style="border-bottom:1px solid #1e1e3522;">
             <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace; color:var(--green);">${{ c.strike }}</td>
             <td style="padding:8px 10px; color:var(--text-dim);">{{ c.expiry }}</td>
             <td style="padding:8px 10px; font-weight:700;">{{ "{:,}".format(c.volume) }}</td>
@@ -258,7 +258,7 @@
       {% if opts.top_puts %}
       <table style="width:100%; border-collapse:collapse; font-size:13px;">
         <thead>
-          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--border);">
+          <tr style="color:var(--text-dim); text-align:left; border-bottom:1px solid var(--card-border);">
             <th style="padding:6px 10px;">Strike</th>
             <th style="padding:6px 10px;">Expiry</th>
             <th style="padding:6px 10px;">Volume</th>
@@ -269,7 +269,7 @@
         </thead>
         <tbody>
           {% for p in opts.top_puts %}
-          <tr style="border-bottom:1px solid var(--border)22;">
+          <tr style="border-bottom:1px solid #1e1e3522;">
             <td style="padding:8px 10px; font-family:'JetBrains Mono',monospace; color:var(--red);">${{ p.strike }}</td>
             <td style="padding:8px 10px; color:var(--text-dim);">{{ p.expiry }}</td>
             <td style="padding:8px 10px; font-weight:700;">{{ "{:,}".format(p.volume) }}</td>
@@ -294,9 +294,9 @@
     <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
       {% for article in news %}
       <a href="{{ article.link }}" target="_blank" rel="noopener"
-         style="display:block; padding:14px 16px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; text-decoration:none; transition:border-color 0.2s;"
-         onmouseover="this.style.borderColor='var(--accent,#00d4aa)'"
-         onmouseout="this.style.borderColor='var(--border)'">
+         style="display:block; padding:14px 16px; background:var(--bg2); border:1px solid var(--card-border); border-radius:8px; text-decoration:none; transition:border-color 0.2s;"
+         onmouseover="this.style.borderColor='var(--green)'"
+         onmouseout="this.style.borderColor='var(--card-border)'">
         <div style="font-size:13px; font-weight:500; color:var(--text); line-height:1.4; margin-bottom:4px;">
           {{ article.title }}
         </div>
@@ -400,10 +400,15 @@
 
   // ── Options tab toggle ─────────────────────────────────────────────────
   window.showTab = function(tab) {
-    document.getElementById('tblCalls').style.display = tab === 'calls' ? 'block' : 'none';
-    document.getElementById('tblPuts').style.display  = tab === 'puts'  ? 'block' : 'none';
-    document.getElementById('tabCalls').classList.toggle('active', tab === 'calls');
-    document.getElementById('tabPuts').classList.toggle('active',  tab === 'puts');
+    var tblCalls = document.getElementById('tblCalls');
+    var tblPuts  = document.getElementById('tblPuts');
+    var tabCalls = document.getElementById('tabCalls');
+    var tabPuts  = document.getElementById('tabPuts');
+    if (!tblCalls || !tblPuts) return;
+    tblCalls.style.display = tab === 'calls' ? 'block' : 'none';
+    tblPuts.style.display  = tab === 'puts'  ? 'block' : 'none';
+    if (tabCalls) tabCalls.classList.toggle('active', tab === 'calls');
+    if (tabPuts)  tabPuts.classList.toggle('active',  tab === 'puts');
   };
 })();
 </script>

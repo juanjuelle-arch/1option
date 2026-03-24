@@ -6,17 +6,18 @@ function switchTab(type) {
   const putsPane  = document.getElementById('tab-puts');
   const callsBtn  = document.querySelector('.tab-calls');
   const putsBtn   = document.querySelector('.tab-puts');
+  if (!callsPane || !putsPane) return;
 
   if (type === 'calls') {
     callsPane.style.display = 'block';
     putsPane.style.display  = 'none';
-    callsBtn.classList.add('active');
-    putsBtn.classList.remove('active');
+    if (callsBtn) callsBtn.classList.add('active');
+    if (putsBtn)  putsBtn.classList.remove('active');
   } else {
     putsPane.style.display  = 'block';
     callsPane.style.display = 'none';
-    putsBtn.classList.add('active');
-    callsBtn.classList.remove('active');
+    if (putsBtn)  putsBtn.classList.add('active');
+    if (callsBtn) callsBtn.classList.remove('active');
   }
 }
 
@@ -79,32 +80,6 @@ async function refreshMarketTicker() {
   }
 }
 
-// ─── Dashboard Data Refresh ───────────────────────────────────────────────────
-async function refreshData() {
-  const btn = document.querySelector('[onclick="refreshData()"]');
-  if (btn) { btn.textContent = '↻ Refreshing...'; btn.disabled = true; }
-
-  try {
-    const res = await fetch('/api/picks');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.updated_at) {
-        const el = document.getElementById('updatedAt');
-        if (el) el.textContent = data.updated_at;
-      }
-    }
-  } catch (e) {
-    console.error('Refresh error:', e);
-  } finally {
-    if (btn) {
-      setTimeout(() => {
-        btn.textContent = '↻ Refresh';
-        btn.disabled = false;
-      }, 1000);
-    }
-  }
-}
-
 // ─── Auto-dismiss flash messages ─────────────────────────────────────────────
 document.querySelectorAll('.flash').forEach(el => {
   setTimeout(() => {
@@ -134,6 +109,15 @@ document.addEventListener('DOMContentLoaded', () => {
   animateArcGauge();
   animateCPBars();
   animateSectorBars();
+
+  // Mobile hamburger toggle
+  const navToggle = document.getElementById('navToggle');
+  const navLinks = document.querySelector('.nav-links');
+  if (navToggle && navLinks) {
+    navToggle.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+    });
+  }
 
   // Ticker refreshes every 30s
   setInterval(refreshMarketTicker, 30000);
