@@ -279,18 +279,29 @@ def detect_unusual_options(calls_df, puts_df, current_price):
 
 # ─── Options Data ────────────────────────────────────────────────────────────
 
-def _score_option(row, current_price, kind, intel_score=50):
+def _score_option(row, current_price, kind, intel_score=50, intel_profile=None):
     """
-    Wall-Street-grade option scoring with multi-source intelligence.
-    Evaluates each contract on 7 dimensions a professional trader cares about:
+    Wall-Street-grade option scoring powered by ALL 13+ data sources.
+    Evaluates each contract on 11 dimensions:
+
+    CONTRACT QUALITY (0-100 pts):
       1. Moneyness   — slightly OTM (2-8%) is the sweet spot for risk/reward
       2. Liquidity    — tight bid/ask spread, high volume + open interest
       3. Volume/OI    — ratio > 1 = fresh money flowing in (institutional signal)
       4. IV value     — moderate IV preferred (not overpriced, not dead)
       5. Notional     — bigger dollar flow = institutional conviction
       6. Premium      — filter out penny options and overpriced ones
-      7. Intel boost  — multi-source intelligence score from aggregated data
+
+    MULTI-SOURCE INTELLIGENCE (up to +55 / -35 pts):
+      7. Composite intel score — from aggregated 13-source profile
+      8. Analyst consensus     — Strong Buy boosts calls, downgrades boost puts
+      9. Insider sentiment     — SEC filings from OpenInsider
+     10. Social momentum       — StockTwits bullish/bearish ratio
+     11. Fundamental quality   — revenue growth, margins, earnings trajectory
     """
+    if intel_profile is None:
+        intel_profile = {}
+
     try:
         strike = float(row.get("strike", 0) or 0)
         volume = float(row.get("volume", 0) or 0)
@@ -304,29 +315,27 @@ def _score_option(row, current_price, kind, intel_score=50):
             return -999
 
         # ── 1. Moneyness (0-30 pts) ─────────────────────────────────────
-        # Sweet spot: slightly OTM (2-8% from current price)
         if kind == "CALL":
             otm_pct = (strike - current_price) / current_price * 100
         else:
             otm_pct = (current_price - strike) / current_price * 100
 
-        if -2 <= otm_pct <= 2:        # Near ATM — good for high-probability
+        if -2 <= otm_pct <= 2:
             moneyness_score = 25
-        elif 2 < otm_pct <= 5:        # Slightly OTM — best risk/reward
+        elif 2 < otm_pct <= 5:
             moneyness_score = 30
-        elif 5 < otm_pct <= 10:       # Moderately OTM — still tradeable
+        elif 5 < otm_pct <= 10:
             moneyness_score = 18
-        elif 10 < otm_pct <= 15:      # Far OTM — speculative but acceptable
+        elif 10 < otm_pct <= 15:
             moneyness_score = 8
-        elif -5 <= otm_pct < -2:      # Slightly ITM — good for safer plays
+        elif -5 <= otm_pct < -2:
             moneyness_score = 22
         elif otm_pct > 15 or otm_pct < -10:
-            moneyness_score = 0        # Too far — skip
+            moneyness_score = 0
         else:
             moneyness_score = 5
 
         # ── 2. Liquidity (0-25 pts) ──────────────────────────────────────
-        # Volume + OI + tight spread = easy to enter/exit
         liq_score = 0
         if volume >= 500:
             liq_score += 10
@@ -342,47 +351,43 @@ def _score_option(row, current_price, kind, intel_score=50):
         elif oi >= 50:
             liq_score += 1
 
-        # Bid-ask spread as % of mid price (tighter = better)
         if bid > 0 and ask > 0:
             mid = (bid + ask) / 2
             spread_pct = (ask - bid) / mid * 100 if mid > 0 else 100
             if spread_pct <= 3:
-                liq_score += 7     # Very tight — institutional-grade
+                liq_score += 7
             elif spread_pct <= 8:
                 liq_score += 4
             elif spread_pct <= 15:
                 liq_score += 1
 
         # ── 3. Volume/OI ratio (0-20 pts) ────────────────────────────────
-        # Vol/OI > 1 = new positions being opened (smart money signal)
         vol_oi = volume / oi if oi > 0 else 0
         if vol_oi >= 3.0:
-            voi_score = 20         # Massive fresh flow — very unusual
+            voi_score = 20
         elif vol_oi >= 1.5:
-            voi_score = 15         # Strong fresh positioning
+            voi_score = 15
         elif vol_oi >= 0.8:
-            voi_score = 8          # Decent activity
+            voi_score = 8
         elif vol_oi >= 0.3:
             voi_score = 3
         else:
             voi_score = 0
 
         # ── 4. IV value (0-10 pts) ───────────────────────────────────────
-        # Moderate IV = not overpriced. Too low = dead stock. Too high = expensive.
         iv_pct = iv * 100
         if 20 <= iv_pct <= 50:
-            iv_score = 10          # Sweet spot
+            iv_score = 10
         elif 50 < iv_pct <= 80:
-            iv_score = 6           # Elevated but ok for momentum plays
+            iv_score = 6
         elif 15 <= iv_pct < 20:
             iv_score = 5
         elif iv_pct > 80:
-            iv_score = 2           # Very expensive premium
+            iv_score = 2
         else:
             iv_score = 0
 
         # ── 5. Notional value (0-10 pts) ─────────────────────────────────
-        # Bigger $ flow = more institutional conviction
         notional = volume * last * 100
         if notional >= 5_000_000:
             not_score = 10
@@ -396,10 +401,9 @@ def _score_option(row, current_price, kind, intel_score=50):
             not_score = 0
 
         # ── 6. Premium filter (0-5 pts) ──────────────────────────────────
-        # Filter out penny options (< $0.10) and extreme prices
         prem_pct = last / current_price * 100
         if 0.5 <= prem_pct <= 8:
-            prem_score = 5         # Reasonable premium range
+            prem_score = 5
         elif 0.2 <= prem_pct < 0.5 or 8 < prem_pct <= 15:
             prem_score = 2
         else:
@@ -407,26 +411,161 @@ def _score_option(row, current_price, kind, intel_score=50):
 
         # Hard filters — disqualify bad contracts
         if last < 0.10:
-            return -999            # Penny option — untradeable
+            return -999
         if volume < 10:
-            return -999            # No liquidity
+            return -999
         if otm_pct > 20:
-            return -999            # Way too far OTM
+            return -999
 
-        # ── 7. Multi-source intelligence boost (0-15 pts) ───────────
-        # intel_score is 0-100 from aggregated data (analyst, IV rank,
-        # fundamentals, earnings, institutional activity)
+        # ═══════════════════════════════════════════════════════════════════
+        # MULTI-SOURCE INTELLIGENCE (13+ data sources)
+        # ═══════════════════════════════════════════════════════════════════
+
+        # ── 7. Composite intel score (0-15 pts / -10 penalty) ────────────
         intel_boost = 0
         if intel_score >= 70:
-            intel_boost = 15       # Strong conviction from all sources
+            intel_boost = 15
         elif intel_score >= 60:
             intel_boost = 10
         elif intel_score >= 50:
             intel_boost = 5
         elif intel_score <= 30:
-            intel_boost = -10      # Red flags from multiple sources
+            intel_boost = -10
 
-        total = moneyness_score + liq_score + voi_score + iv_score + not_score + prem_score + intel_boost
+        # ── 8. Analyst consensus — Yahoo + Finviz + Zacks (0-12 pts) ────
+        # For CALLS: Strong Buy = boost. For PUTS: Sell = boost.
+        analyst_boost = 0
+        analyst_recom = intel_profile.get("analyst_recom")  # 1=Strong Buy, 5=Sell
+        if analyst_recom:
+            if kind == "CALL":
+                if analyst_recom <= 1.5:
+                    analyst_boost = 12   # Strong Buy → great for calls
+                elif analyst_recom <= 2.0:
+                    analyst_boost = 8
+                elif analyst_recom >= 3.5:
+                    analyst_boost = -8   # Sell rating → bad for calls
+            else:  # PUT
+                if analyst_recom >= 3.5:
+                    analyst_boost = 10   # Sell rating → good for puts
+                elif analyst_recom >= 3.0:
+                    analyst_boost = 5
+                elif analyst_recom <= 1.5:
+                    analyst_boost = -6   # Strong Buy → bad for puts
+
+        # Zacks Rank (1=Strong Buy, 5=Strong Sell) — from Zacks.com
+        zacks = intel_profile.get("zacks_rank")
+        if zacks:
+            if kind == "CALL" and zacks <= 2:
+                analyst_boost += 4
+            elif kind == "PUT" and zacks >= 4:
+                analyst_boost += 4
+            elif kind == "CALL" and zacks >= 4:
+                analyst_boost -= 3
+            elif kind == "PUT" and zacks <= 2:
+                analyst_boost -= 3
+
+        # ── 9. Insider sentiment — OpenInsider SEC filings (0-8 pts) ─────
+        insider_boost = 0
+        insider_sent = intel_profile.get("insider_sentiment")
+        if insider_sent:
+            if kind == "CALL" and insider_sent == "bullish":
+                insider_boost = 8    # Insiders buying → great for calls
+            elif kind == "PUT" and insider_sent == "bearish":
+                insider_boost = 6    # Insiders selling → good for puts
+            elif kind == "CALL" and insider_sent == "bearish":
+                insider_boost = -5   # Insiders selling → bad for calls
+            elif kind == "PUT" and insider_sent == "bullish":
+                insider_boost = -4   # Insiders buying → bad for puts
+
+        # ── 10. Social sentiment — StockTwits (0-6 pts) ─────────────────
+        social_boost = 0
+        social_score = intel_profile.get("social_sentiment_score")
+        if social_score is not None:
+            if kind == "CALL" and social_score >= 70:
+                social_boost = 6     # Social very bullish → calls
+            elif kind == "CALL" and social_score >= 55:
+                social_boost = 2
+            elif kind == "PUT" and social_score <= 30:
+                social_boost = 5     # Social very bearish → puts
+            elif kind == "CALL" and social_score <= 30:
+                social_boost = -4    # Social bearish → bad for calls
+            elif kind == "PUT" and social_score >= 70:
+                social_boost = -3    # Social bullish → bad for puts
+
+        # ── 11. Fundamental quality — Yahoo + Finviz (0-14 pts) ──────────
+        fundamental_boost = 0
+
+        # Revenue growth (from Yahoo/Finviz)
+        rev_growth = intel_profile.get("revenue_growth")
+        if rev_growth is not None:
+            rg = rev_growth * 100 if abs(rev_growth) < 5 else rev_growth
+            if kind == "CALL":
+                if rg >= 30:
+                    fundamental_boost += 6
+                elif rg >= 15:
+                    fundamental_boost += 3
+                elif rg < -5:
+                    fundamental_boost -= 4
+            else:  # PUT
+                if rg < -5:
+                    fundamental_boost += 4  # Revenue declining → put opportunity
+                elif rg >= 30:
+                    fundamental_boost -= 3  # Strong growth → bad for puts
+
+        # Profit margins (from Yahoo/Finviz)
+        profit_margin = intel_profile.get("profit_margin") or intel_profile.get("profit_margins")
+        if profit_margin is not None:
+            pm = profit_margin * 100 if abs(profit_margin) < 5 else profit_margin
+            if kind == "CALL" and pm >= 25:
+                fundamental_boost += 4   # Quality business
+            elif kind == "CALL" and pm < 0:
+                fundamental_boost -= 3   # Unprofitable
+
+        # Upside to analyst target (Yahoo + Stockanalysis)
+        upside = intel_profile.get("upside_pct")
+        if upside is not None:
+            if kind == "CALL" and upside >= 30:
+                fundamental_boost += 4
+            elif kind == "CALL" and upside >= 15:
+                fundamental_boost += 2
+            elif kind == "PUT" and upside <= -10:
+                fundamental_boost += 3   # Below target → puts
+            elif kind == "CALL" and upside <= -10:
+                fundamental_boost -= 3
+
+        # Short squeeze data (Finviz + Yahoo)
+        squeeze = intel_profile.get("short_squeeze_score")
+        if squeeze is not None and squeeze >= 60:
+            if kind == "CALL":
+                fundamental_boost += 4   # Squeeze potential → calls
+
+        # Earnings proximity (EarningsWhispers + Yahoo)
+        beat_rate = intel_profile.get("beat_rate")
+        if beat_rate is not None:
+            if kind == "CALL" and beat_rate >= 80:
+                fundamental_boost += 3   # Consistent beater → calls
+            elif kind == "PUT" and beat_rate <= 35:
+                fundamental_boost += 3   # Consistent miss → puts
+
+        # Fear & Greed contrarian (CNN)
+        fg = intel_profile.get("fg_score")
+        if fg is not None:
+            if fg <= 20 and kind == "CALL":
+                fundamental_boost += 3   # Extreme fear → contrarian calls
+            elif fg >= 80 and kind == "PUT":
+                fundamental_boost += 2   # Extreme greed → protective puts
+
+        # IV Rank (Barchart + Yahoo computed)
+        iv_rank = intel_profile.get("iv_rank")
+        if iv_rank is not None:
+            if iv_rank <= 25:
+                fundamental_boost += 3   # Cheap options → great for buying
+            elif iv_rank >= 80:
+                fundamental_boost -= 4   # Expensive options → bad for buying
+
+        total = (moneyness_score + liq_score + voi_score + iv_score +
+                 not_score + prem_score + intel_boost + analyst_boost +
+                 insider_boost + social_boost + fundamental_boost)
         return total
 
     except Exception:
@@ -474,14 +613,18 @@ def get_options_data(ticker, use_intel=True):
 
         unusual_calls, unusual_puts = detect_unusual_options(all_calls, all_puts, current_price)
 
-        # ── Fetch multi-source intelligence for smarter scoring ──────
+        # ── Fetch ALL data sources for smarter option scoring ──────────
         intel_score = 50  # neutral default
         intel_profile = {}
         if use_intel and get_enriched_ticker_profile is not None:
             try:
                 intel_profile = get_enriched_ticker_profile(ticker)
                 intel_score = intel_profile.get("intel_score", 50)
-                logger.debug(f"Options {ticker}: intel_score={intel_score}, sources={intel_profile.get('sources_hit', 0)}")
+                logger.info(f"Options {ticker}: intel_score={intel_score}, "
+                            f"sources={intel_profile.get('sources_hit', 0)}, "
+                            f"analyst={intel_profile.get('analyst_recom', '-')}, "
+                            f"insider={intel_profile.get('insider_sentiment', '-')}, "
+                            f"social={intel_profile.get('social_sentiment_score', '-')}")
             except Exception as e:
                 logger.debug(f"Options {ticker} intel failed: {e}")
 
@@ -499,25 +642,24 @@ def get_options_data(ticker, use_intel=True):
                 "ask": round(float(row.get("ask", 0) or 0), 2),
             }
 
-        # ── Score and rank calls ─────────────────────────────────────────
+        # ── Score and rank calls (using ALL data sources) ────────────────
         if not all_calls.empty and current_price > 0:
             all_calls["_score"] = all_calls.apply(
-                lambda r: _score_option(r, current_price, "CALL", intel_score), axis=1
+                lambda r: _score_option(r, current_price, "CALL", intel_score, intel_profile), axis=1
             )
             best_calls = all_calls[all_calls["_score"] > 0].sort_values(
                 "_score", ascending=False
             ).head(5)
             top_calls = [fmt(r, "CALL") for _, r in best_calls.iterrows()]
         else:
-            # Fallback to volume sort if no price data
             top_calls = [fmt(r, "CALL") for _, r in all_calls.dropna(
                 subset=["volume"]).sort_values("volume", ascending=False
             ).head(5).iterrows()]
 
-        # ── Score and rank puts ──────────────────────────────────────────
+        # ── Score and rank puts (using ALL data sources) ─────────────────
         if not all_puts.empty and current_price > 0:
             all_puts["_score"] = all_puts.apply(
-                lambda r: _score_option(r, current_price, "PUT", intel_score), axis=1
+                lambda r: _score_option(r, current_price, "PUT", intel_score, intel_profile), axis=1
             )
             best_puts = all_puts[all_puts["_score"] > 0].sort_values(
                 "_score", ascending=False
@@ -1154,30 +1296,77 @@ def get_top_picks(earnings_list=None):
 
 def get_global_top_options():
     """
-    Aggregate the single best call and put from EACH ticker across the
-    top 20 watchlist tickers, then rank the pool. Uses fast mode (no
-    multi-source scraper) to keep scheduler fast.
+    Aggregate the best calls and puts across top watchlist + GARP candidate
+    tickers, scored using ALL 13 data sources.
+
+    Phase 1: Quick scan (use_intel=False) across 25 tickers for speed
+    Phase 2: Re-score top candidates with FULL intel (all 13 sources)
+    Phase 3: Rank by composite: intel-boosted score + notional flow
 
     Max 1 call + 1 put per ticker shown in the final top 5.
     """
-    all_calls, all_puts = [], []
-
-    # Top 20 most active tickers — fast scan without intel scraper
+    # Phase 1: Quick pre-scan to find which tickers have active options
     scan_tickers = list(WATCHLIST[:20])
+    # Add top GARP candidates that aren't in WATCHLIST
+    for t in ANALYST_CANDIDATES[:15]:
+        if t not in scan_tickers:
+            scan_tickers.append(t)
 
+    logger.info(f"Global options: scanning {len(scan_tickers)} tickers...")
+
+    # Quick scan without intel to find active chains
+    quick_results = {}
     for ticker in scan_tickers:
         try:
             opts = get_options_data(ticker, use_intel=False)
+            if opts and (opts["top_calls"] or opts["top_puts"]):
+                quick_results[ticker] = opts
         except Exception as e:
-            logger.debug(f"Global options {ticker}: {e}")
-            continue
-        if not opts:
-            continue
-        # Take only the BEST call and BEST put per ticker (already scored & sorted)
-        if opts["top_calls"]:
-            all_calls.append(opts["top_calls"][0])
-        if opts["top_puts"]:
-            all_puts.append(opts["top_puts"][0])
+            logger.debug(f"Global options quick scan {ticker}: {e}")
+
+    # Phase 2: Re-score top 15 most active with FULL intel (all sources)
+    # Sort by total volume to find the most active
+    active_tickers = sorted(
+        quick_results.keys(),
+        key=lambda t: (quick_results[t].get("total_calls", 0) +
+                       quick_results[t].get("total_puts", 0)),
+        reverse=True
+    )[:15]
+
+    logger.info(f"Global options: enriching top {len(active_tickers)} with all data sources...")
+
+    all_calls, all_puts = [], []
+    for ticker in active_tickers:
+        try:
+            # Full intel scan with ALL 13 data sources
+            opts = get_options_data(ticker, use_intel=True)
+            if not opts:
+                # Fall back to quick results
+                opts = quick_results.get(ticker)
+            if not opts:
+                continue
+            if opts["top_calls"]:
+                all_calls.append(opts["top_calls"][0])
+            if opts["top_puts"]:
+                all_puts.append(opts["top_puts"][0])
+        except Exception as e:
+            logger.debug(f"Global options intel {ticker}: {e}")
+            # Fall back to quick results
+            opts = quick_results.get(ticker)
+            if opts:
+                if opts["top_calls"]:
+                    all_calls.append(opts["top_calls"][0])
+                if opts["top_puts"]:
+                    all_puts.append(opts["top_puts"][0])
+
+    # Also add remaining tickers from quick scan (use their pre-scored results)
+    seen_tickers = set(active_tickers)
+    for ticker, opts in quick_results.items():
+        if ticker not in seen_tickers:
+            if opts["top_calls"]:
+                all_calls.append(opts["top_calls"][0])
+            if opts["top_puts"]:
+                all_puts.append(opts["top_puts"][0])
 
     def _rank(opt):
         """
@@ -1188,13 +1377,12 @@ def get_global_top_options():
         vol = opt["volume"]
         oi  = opt.get("open_interest", 1) or 1
         notional = vol * opt["last_price"] * 100
-        vol_oi = min(vol / oi, 5)  # cap to avoid outlier distortion
+        vol_oi = min(vol / oi, 5)
         return notional * 0.5 + vol * 0.2 + vol_oi * 10000 * 0.3
 
     all_calls.sort(key=_rank, reverse=True)
     all_puts.sort(key=_rank, reverse=True)
 
-    # Ensure no duplicate tickers in final output
     def _dedupe(options, limit=5):
         seen = set()
         result = []
