@@ -15,7 +15,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 def refresh_main():
-    """Refresh dashboard data — picks, sentiment, news, options. Runs every 2 min."""
+    """Refresh core dashboard data — market, sentiment, news, earnings. Runs every 2 min."""
     logger.info("Refreshing main cache...")
     try:
         market = data_fetcher.get_market_overview()
@@ -30,28 +30,45 @@ def refresh_main():
         earnings = data_fetcher.get_earnings_calendar()
         cache.set("earnings", earnings)
 
-        picks = data_fetcher.get_top_picks(earnings)
-        cache.set("picks", picks)
-
-        try:
-            top_calls, top_puts = data_fetcher.get_global_top_options()
-            cache.set("top_calls", top_calls)
-            cache.set("top_puts", top_puts)
-            logger.info(f"Options cached: {len(top_calls)} calls, {len(top_puts)} puts")
-        except Exception as e:
-            logger.error(f"Options refresh failed (non-blocking): {e}")
-
-        try:
-            if get_trending_watchlist:
-                trending = get_trending_watchlist()
-                cache.set("trending", trending)
-                logger.info(f"Trending cached: {len(trending)} tickers")
-        except Exception as e:
-            logger.error(f"Trending refresh failed (non-blocking): {e}")
-
         logger.info("Main cache refresh complete.")
     except Exception as e:
         logger.error(f"Main refresh error: {e}")
+
+
+def refresh_picks():
+    """Refresh Top 10 Picks (Wall Street GARP engine + all sources). Runs every 5 min."""
+    logger.info("Refreshing picks with GARP engine...")
+    try:
+        earnings = cache.get("earnings") or []
+        picks = data_fetcher.get_top_picks(earnings)
+        cache.set("picks", picks)
+        logger.info(f"Picks cached: {len(picks)} picks")
+    except Exception as e:
+        logger.error(f"Picks refresh error: {e}")
+
+
+def refresh_options():
+    """Refresh global top calls/puts (full intel from all 13 sources). Runs every 5 min."""
+    logger.info("Refreshing options with full intel...")
+    try:
+        top_calls, top_puts = data_fetcher.get_global_top_options()
+        cache.set("top_calls", top_calls)
+        cache.set("top_puts", top_puts)
+        logger.info(f"Options cached: {len(top_calls)} calls, {len(top_puts)} puts")
+    except Exception as e:
+        logger.error(f"Options refresh failed: {e}")
+
+
+def refresh_trending():
+    """Refresh trending watchlist (all sources enriched). Runs every 5 min."""
+    logger.info("Refreshing trending watchlist...")
+    try:
+        if get_trending_watchlist:
+            trending = get_trending_watchlist()
+            cache.set("trending", trending)
+            logger.info(f"Trending cached: {len(trending)} tickers")
+    except Exception as e:
+        logger.error(f"Trending refresh failed: {e}")
 
 
 def refresh_stocks():
@@ -66,12 +83,32 @@ def refresh_stocks():
 
 
 def start_scheduler():
-    """Start background scheduler."""
+    """Start background scheduler with staggered jobs to avoid Railway timeouts."""
     scheduler = BackgroundScheduler()
+
+    # Core data — lightweight, every 2 min
     scheduler.add_job(refresh_main, "interval", minutes=2, id="refresh_main")
+
+    # Heavy jobs — full 13-source intel, every 5 min (staggered to spread load)
+    scheduler.add_job(refresh_picks, "interval", minutes=5, id="refresh_picks")
+    scheduler.add_job(refresh_options, "interval", minutes=5, id="refresh_options",
+                      next_run_time=None)  # Will start after first picks run
+    scheduler.add_job(refresh_trending, "interval", minutes=5, id="refresh_trending",
+                      next_run_time=None)  # Will start after first picks run
+
+    # Stock browser — every 15 min
     scheduler.add_job(refresh_stocks, "interval", minutes=15, id="refresh_stocks")
-    # Run stock list once at startup
+
+    # Startup: run stock list + picks immediately, options/trending after 2 min
     scheduler.add_job(refresh_stocks, "date", id="refresh_stocks_startup")
+    scheduler.add_job(refresh_picks, "date", id="refresh_picks_startup")
+
+    from datetime import datetime, timedelta
+    delayed = datetime.now() + timedelta(minutes=2)
+    scheduler.add_job(refresh_options, "date", run_date=delayed, id="refresh_options_startup")
+    scheduler.add_job(refresh_trending, "date", run_date=delayed + timedelta(seconds=30),
+                      id="refresh_trending_startup")
+
     scheduler.start()
-    logger.info("Scheduler started — main every 2 min, stocks every 15 min.")
+    logger.info("Scheduler started — main/2min, picks+options+trending/5min, stocks/15min")
     return scheduler
