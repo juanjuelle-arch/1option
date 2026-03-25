@@ -24,9 +24,10 @@ HEADERS = {
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 }
 
-# ─── Cache to avoid hammering sources ────────────────────────────────────────
+# ─── Cache to avoid hammering sources (with size limit) ─────────────────────
 _scraper_cache = {}
 _CACHE_TTL = 600  # 10 minutes
+_CACHE_MAX_SIZE = 500  # M-4: prevent unbounded memory growth
 
 
 def _cached(key, ttl=_CACHE_TTL):
@@ -38,6 +39,17 @@ def _cached(key, ttl=_CACHE_TTL):
 
 
 def _set_cache(key, data):
+    # Evict stale entries if cache is too large
+    if len(_scraper_cache) > _CACHE_MAX_SIZE:
+        now = time.time()
+        stale = [k for k, v in _scraper_cache.items() if (now - v["ts"]) > _CACHE_TTL]
+        for k in stale:
+            del _scraper_cache[k]
+        # If still too large, remove oldest half
+        if len(_scraper_cache) > _CACHE_MAX_SIZE:
+            sorted_keys = sorted(_scraper_cache, key=lambda k: _scraper_cache[k]["ts"])
+            for k in sorted_keys[:len(sorted_keys) // 2]:
+                del _scraper_cache[k]
     _scraper_cache[key] = {"data": data, "ts": time.time()}
 
 
@@ -538,7 +550,7 @@ def get_insider_trades(ticker):
     result = {}
     try:
         url = (
-            f"http://openinsider.com/screener?s={ticker}&o=&pl=&ph=&ll=&lh="
+            f"https://openinsider.com/screener?s={ticker}&o=&pl=&ph=&ll=&lh="
             f"&fd=30&fdr=&td=&tdr=&feession=&lacession=&session="
         )
         r = requests.get(url, headers=HEADERS, timeout=10)

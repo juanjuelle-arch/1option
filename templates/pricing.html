@@ -20,12 +20,12 @@
           <li>✓ Top 3 stock picks (preview)</li>
           <li>✓ 3 news headlines</li>
           <li>✓ Fear & Greed indicator</li>
-          <li class="locked">✗ Full top 10 picks</li>
-          <li class="locked">✗ Calls & puts data</li>
-          <li class="locked">✗ Technical signals (RSI, MACD)</li>
+          <li class="locked">✗ Full top 10 GARP picks</li>
+          <li class="locked">✗ 8 calls + 8 puts (intel-scored)</li>
+          <li class="locked">✗ Trending watchlist</li>
           <li class="locked">✗ Earnings calendar</li>
           <li class="locked">✗ Full news feed</li>
-          <li class="locked">✗ Sector heatmap</li>
+          <li class="locked">✗ 13 data sources</li>
         </ul>
         <a href="{{ url_for('signup') }}" class="btn btn-ghost btn-full">Get Started Free</a>
       </div>
@@ -37,15 +37,15 @@
         <div class="plan-price">$19.99<span class="plan-period">/month</span></div>
         <ul class="plan-features">
           <li>✓ Everything in Free</li>
-          <li>✓ <strong>Top 10 weekly stock picks</strong></li>
-          <li>✓ <strong>Full calls & puts flow data</strong></li>
-          <li>✓ <strong>RSI, MACD, MA signals per stock</strong></li>
+          <li>✓ <strong>Top 10 GARP-scored picks</strong></li>
+          <li>✓ <strong>8 calls + 8 puts (11-dim scoring)</strong></li>
+          <li>✓ <strong>13 fused data sources</strong></li>
+          <li>✓ <strong>Analyst consensus + insider intel</strong></li>
+          <li>✓ <strong>Trending watchlist (multi-source)</strong></li>
           <li>✓ <strong>Market sentiment dashboard</strong></li>
-          <li>✓ <strong>Earnings calendar (this week)</strong></li>
-          <li>✓ <strong>24+ news sources, live</strong></li>
-          <li>✓ <strong>Sector performance heatmap</strong></li>
-          <li>✓ <strong>Auto-refresh every 2 minutes</strong></li>
-          <li>✓ <strong>Call/Put ratio per stock</strong></li>
+          <li>✓ <strong>Earnings calendar + beat rates</strong></li>
+          <li>✓ <strong>Sector heatmap + social signals</strong></li>
+          <li>✓ <strong>Stock browser with charts</strong></li>
         </ul>
         {% if current_user.is_authenticated %}
           {% if current_user.is_subscribed %}
@@ -68,11 +68,11 @@
       <div class="faq-grid">
         <div class="faq-item">
           <h3>Where does the data come from?</h3>
-          <p>All data is pulled live from Yahoo Finance (stocks, options, technicals), RSS news feeds from major financial outlets, and Finviz for analyst signals.</p>
+          <p>We fuse 13 real-time sources: Yahoo Finance, Finviz, Barchart, Zacks, StockAnalysis, OpenInsider, StockTwits, CBOE, FRED, CNN Fear & Greed, EarningsWhispers, and more.</p>
         </div>
         <div class="faq-item">
           <h3>How often does it refresh?</h3>
-          <p>The dashboard auto-refreshes every 2 minutes. Backend data is updated every 2 minutes during market hours.</p>
+          <p>The dashboard auto-refreshes every 2 minutes. Picks, options, and trending data refresh every 5 minutes. Market data and news every 2 minutes.</p>
         </div>
         <div class="faq-item">
           <h3>Can I cancel anytime?</h3>

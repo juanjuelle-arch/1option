@@ -1,5 +1,5 @@
 """
-app.py — StockPulse Flask application
+app.py — 1.OPTION Flask application
 Routes: landing, dashboard, auth, Stripe, API endpoints
 """
 
@@ -14,6 +14,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
 import cache
 import data_fetcher
@@ -38,10 +39,19 @@ IS_PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
 # ─── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32).hex())
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///stockpulse.db"
+
+# C-4: Hard error if SECRET_KEY not set in production
+_secret = os.environ.get("SECRET_KEY", "")
+if IS_PRODUCTION and not _secret:
+    raise RuntimeError("SECRET_KEY environment variable must be set in production!")
+app.secret_key = _secret or os.urandom(32).hex()
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///1option.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no CSS/JS caching during dev
+
+# M-10: Only disable static caching in dev
+if not IS_PRODUCTION:
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # ─── Security Config ─────────────────────────────────────────────────────────
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -61,9 +71,15 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# Ticker validation pattern: 1-5 alphanumeric chars, optional -X suffix (e.g. BRK-B)
-TICKER_RE = re.compile(r"^[A-Z0-9]{1,5}(-[A-Z])?$")
+# L-3: Ticker validation — support both BRK-B and BRK.B formats
+TICKER_RE = re.compile(r"^[A-Z0-9]{1,5}([.\-][A-Z]{1,2})?$")
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "5y"}
+
+# H-3: Email validation pattern
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# M-9: Dummy hash for constant-time login
+_DUMMY_HASH = generate_password_hash("dummy_password_for_timing", method='pbkdf2:sha256')
 
 @app.after_request
 def add_headers(response):
@@ -83,10 +99,20 @@ def add_headers(response):
     )
     if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Prevent stale CSS/JS on the external proxy
+    # M-10: Cache static files in production (1 hour), no-cache in dev
     if request.path.startswith("/static/"):
-        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        if IS_PRODUCTION:
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        else:
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
+
+# M-5: Force HTTPS in production
+@app.before_request
+def force_https():
+    if IS_PRODUCTION and not request.is_secure and request.headers.get("X-Forwarded-Proto", "http") != "https":
+        url = request.url.replace("http://", "https://", 1)
+        return redirect(url, code=301)
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")
@@ -99,9 +125,10 @@ login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Please log in to access the dashboard."
 
+# H-1: Use db.session.get() instead of deprecated User.query.get()
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # ─── Init DB + Seed Cache ────────────────────────────────────────────────────
 
@@ -115,7 +142,7 @@ def _initial_load():
         refresh_all()
 threading.Thread(target=_initial_load, daemon=True).start()
 
-# Start 5-min refresh scheduler
+# Start refresh scheduler
 _scheduler = start_scheduler()
 
 # ─── Context Processor ───────────────────────────────────────────────────────
@@ -156,6 +183,14 @@ def signup():
         if not name or not email or not password:
             flash("All fields are required.", "error")
             return render_template("signup.html")
+        # H-4: Name length cap
+        if len(name) > 100:
+            flash("Name is too long (max 100 characters).", "error")
+            return render_template("signup.html")
+        # H-3: Server-side email validation
+        if not EMAIL_RE.match(email):
+            flash("Please enter a valid email address.", "error")
+            return render_template("signup.html")
         if len(password) < 8:
             flash("Password must be at least 8 characters.", "error")
             return render_template("signup.html")
@@ -193,13 +228,24 @@ def login():
                 if parsed.netloc or parsed.scheme or next_page.startswith("//"):
                     next_page = None
             return redirect(next_page or url_for("dashboard"))
+        # M-9: Constant-time response — always run hash check even if user not found
+        if not user:
+            check_password_hash(_DUMMY_HASH, password)
         logger.warning(f"Failed login attempt for {email} from {request.remote_addr}")
         flash("Invalid email or password.", "error")
     return render_template("login.html")
 
-@app.route("/logout")
+# H-5: Logout is POST-only to prevent CSRF logout attacks
+@app.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    logout_user()
+    return redirect(url_for("index"))
+
+# Keep GET logout as a fallback redirect (nav links)
+@app.route("/logout", methods=["GET"])
+@login_required
+def logout_get():
     logout_user()
     return redirect(url_for("index"))
 
@@ -234,11 +280,15 @@ def dashboard():
 @login_required
 def create_checkout_session():
     if not stripe.api_key or not STRIPE_PRICE_ID:
-        # Demo mode — skip Stripe, grant access directly
-        current_user.is_subscribed = True
-        db.session.commit()
-        flash("Demo mode: subscription activated!", "success")
-        return redirect(url_for("dashboard"))
+        # C-1: Demo mode — only grant access if DEMO_MODE env var is explicitly set
+        if os.environ.get("DEMO_MODE", "").lower() == "true":
+            current_user.is_subscribed = True
+            db.session.commit()
+            flash("Demo mode: subscription activated!", "success")
+            return redirect(url_for("dashboard"))
+        else:
+            flash("Payment system is not configured. Please contact support.", "error")
+            return redirect(url_for("pricing"))
     try:
         checkout_session = stripe.checkout.Session.create(
             customer_email=current_user.email,
@@ -255,26 +305,33 @@ def create_checkout_session():
         flash("Payment setup failed. Please try again.", "error")
         return redirect(url_for("pricing"))
 
+# C-1: Payment success now requires valid Stripe session — no free bypass
 @app.route("/payment-success")
 @login_required
 def payment_success():
     session_id = request.args.get("session_id")
-    if session_id and stripe.api_key:
-        try:
-            checkout = stripe.checkout.Session.retrieve(session_id)
-            if checkout.payment_status == "paid":
-                current_user.is_subscribed = True
-                current_user.stripe_customer_id = checkout.customer
-                current_user.stripe_subscription_id = checkout.subscription
-                db.session.commit()
-        except Exception as e:
-            logger.error(f"Payment success error: {e}")
-    else:
-        current_user.is_subscribed = True
-        db.session.commit()
-    flash("Welcome to StockPulse Pro! Your dashboard is ready.", "success")
-    return redirect(url_for("dashboard"))
+    if not session_id or not stripe.api_key:
+        # No valid session — redirect to pricing without granting access
+        flash("Payment could not be verified. Please try again.", "error")
+        return redirect(url_for("pricing"))
+    try:
+        checkout = stripe.checkout.Session.retrieve(session_id)
+        if checkout.payment_status == "paid":
+            current_user.is_subscribed = True
+            current_user.stripe_customer_id = checkout.customer
+            current_user.stripe_subscription_id = checkout.subscription
+            db.session.commit()
+            flash("Welcome to 1.OPTION Pro! Your dashboard is ready.", "success")
+            return redirect(url_for("dashboard"))
+        else:
+            flash("Payment was not completed. Please try again.", "error")
+            return redirect(url_for("pricing"))
+    except Exception as e:
+        logger.error(f"Payment success error: {e}")
+        flash("Payment verification failed. Please contact support.", "error")
+        return redirect(url_for("pricing"))
 
+# H-8: Stripe webhook handles subscription deletion AND payment failures
 @app.route("/webhook", methods=["POST"])
 @csrf.exempt
 def stripe_webhook():
@@ -282,12 +339,34 @@ def stripe_webhook():
     sig_header = request.headers.get("Stripe-Signature")
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        if event["type"] == "customer.subscription.deleted":
+        event_type = event["type"]
+
+        if event_type == "customer.subscription.deleted":
             customer_id = event["data"]["object"]["customer"]
             user = User.query.filter_by(stripe_customer_id=customer_id).first()
             if user:
                 user.is_subscribed = False
                 db.session.commit()
+                logger.info(f"Subscription cancelled for user {user.email}")
+
+        elif event_type == "invoice.payment_failed":
+            customer_id = event["data"]["object"]["customer"]
+            user = User.query.filter_by(stripe_customer_id=customer_id).first()
+            if user:
+                user.is_subscribed = False
+                db.session.commit()
+                logger.warning(f"Payment failed — subscription revoked for {user.email}")
+
+        elif event_type == "customer.subscription.updated":
+            sub = event["data"]["object"]
+            customer_id = sub["customer"]
+            user = User.query.filter_by(stripe_customer_id=customer_id).first()
+            if user:
+                is_active = sub["status"] in ("active", "trialing")
+                user.is_subscribed = is_active
+                db.session.commit()
+                logger.info(f"Subscription updated for {user.email}: active={is_active}")
+
     except Exception as e:
         logger.warning(f"Webhook error from {request.remote_addr}: {e}")
         return jsonify({"error": "Webhook error"}), 400
@@ -325,7 +404,8 @@ def api_options_global():
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     try:
-        top_calls, top_puts = data_fetcher.get_global_top_options()
+        top_calls = cache.get("top_calls") or []
+        top_puts = cache.get("top_puts") or []
         market_data = {}
         if get_cboe_pc_ratio:
             market_data = get_cboe_pc_ratio()
@@ -373,11 +453,7 @@ def api_options_ticker(ticker):
 @app.route("/api/intel/<ticker>")
 @login_required
 def api_intel_ticker(ticker):
-    """
-    Full multi-source intelligence profile for a ticker.
-    Sources: Yahoo Finance, Finviz, Stockanalysis, Barchart,
-    EarningsWhispers, CBOE.
-    """
+    """Full multi-source intelligence profile for a ticker."""
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     ticker = ticker.upper()
@@ -419,28 +495,19 @@ def api_trending():
             logger.error(f"API trending: {e}")
     return jsonify({"trending": trending, "updated_at": cache.get_updated_at("trending")})
 
-# ─── Dev: grant free access for testing ──────────────────────────────────────
+# ─── Demo Access (secured) ───────────────────────────────────────────────────
 
-@app.route("/dev-activate")
-@login_required
-def dev_activate():
-    if app.debug:
-        current_user.is_subscribed = True
-        db.session.commit()
-        flash("Dev mode: subscription activated!", "success")
-        return redirect(url_for("dashboard"))
-    return redirect(url_for("index"))
-
+# C-2: Demo access always requires DEMO_TOKEN — no debug bypass
 @app.route("/demo-access")
 @limiter.limit("3 per minute")
 def demo_access():
-    """Direct demo access — requires DEMO_TOKEN env var or debug mode."""
+    """Direct demo access — requires DEMO_TOKEN env var. No debug bypass."""
     demo_token = os.environ.get("DEMO_TOKEN", "")
-    if not app.debug and (not demo_token or request.args.get("token") != demo_token):
+    if not demo_token or request.args.get("token") != demo_token:
         abort(404)
-    user = User.query.filter_by(email='demo@stockpulse.com').first()
+    user = User.query.filter_by(email='demo@1option.com').first()
     if not user:
-        user = User(email='demo@stockpulse.com', name='Demo User', is_subscribed=True)
+        user = User(email='demo@1option.com', name='Demo User', is_subscribed=True)
         user.set_password(os.urandom(16).hex())
         db.session.add(user)
         db.session.commit()
@@ -472,7 +539,6 @@ def stock_detail(ticker):
         return redirect(url_for("stocks"))
     news = cache.get("news") or []
     ticker_news = [a for a in news if ticker.lower() in a.get("title", "").lower()][:8]
-    # Merge with ticker-specific news
     all_news = ticker_news + [n for n in detail.get("news", [])
                               if n["title"] not in {a.get("title") for a in ticker_news}]
     return render_template("stock_detail.html", ticker=ticker, detail=detail, news=all_news[:10])
@@ -486,8 +552,9 @@ def api_stock_chart(ticker):
     if not TICKER_RE.match(ticker):
         return jsonify({"error": "Invalid ticker"}), 400
     period = request.args.get("period", "1mo")
+    # M-6: Return 400 for invalid period instead of silent fallback
     if period not in VALID_PERIODS:
-        period = "1mo"
+        return jsonify({"error": f"Invalid period. Valid: {', '.join(sorted(VALID_PERIODS))}"}), 400
     data = data_fetcher.get_stock_chart(ticker, period)
     return jsonify(data)
 
@@ -509,9 +576,10 @@ def rate_limited(e):
 
 # ─── Static Security Files ──────────────────────────────────────────────────
 
+# L-6: Use app.static_folder for reliable path resolution
 @app.route("/robots.txt")
 def robots():
-    return send_from_directory("static", "robots.txt")
+    return send_from_directory(app.static_folder, "robots.txt")
 
 
 if __name__ == "__main__":

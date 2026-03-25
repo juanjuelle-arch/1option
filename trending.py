@@ -24,10 +24,11 @@ HEADERS = {
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 }
 
-# ─── Cache to avoid hammering sources ────────────────────────────────────────
+# ─── Cache to avoid hammering sources (with size limit) ─────────────────────
 _trending_cache = {}
 _CACHE_TTL_5 = 300   # 5 minutes
 _CACHE_TTL_10 = 600  # 10 minutes
+_CACHE_MAX_SIZE = 300
 
 
 def _cached(key, ttl=_CACHE_TTL_5):
@@ -39,6 +40,16 @@ def _cached(key, ttl=_CACHE_TTL_5):
 
 
 def _set_cache(key, data):
+    # Evict stale entries if cache is too large
+    if len(_trending_cache) > _CACHE_MAX_SIZE:
+        now = time.time()
+        stale = [k for k, v in _trending_cache.items() if (now - v["ts"]) > _CACHE_TTL_10]
+        for k in stale:
+            del _trending_cache[k]
+        if len(_trending_cache) > _CACHE_MAX_SIZE:
+            sorted_keys = sorted(_trending_cache, key=lambda k: _trending_cache[k]["ts"])
+            for k in sorted_keys[:len(sorted_keys) // 2]:
+                del _trending_cache[k]
     _trending_cache[key] = {"data": data, "ts": time.time()}
 
 

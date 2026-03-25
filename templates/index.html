@@ -8,16 +8,16 @@
   <div class="hero-inner">
     <div class="hero-badge">🔴 LIVE &nbsp;·&nbsp; Data updated every 2 minutes</div>
     <h1 class="hero-title">Top Picks. Real Data.<br><span class="gradient-text">Every Week.</span></h1>
-    <p class="hero-sub">Real-time top stock picks, calls & puts flow, RSI/MACD signals, earnings alerts, and market sentiment — all in one dashboard.</p>
+    <p class="hero-sub">Wall Street GARP-scored stock picks, 8 best calls & puts, analyst consensus, insider activity, and 13 real-time data sources — all in one dashboard.</p>
     <div class="hero-cta">
       <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Get Pro Access — $19.99/mo</a>
       <a href="{{ url_for('pricing') }}" class="btn btn-ghost btn-lg">See Plans →</a>
     </div>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="stat-num">10</span><span class="stat-label">Picks / Week</span></div>
-      <div class="hero-stat"><span class="stat-num">Live</span><span class="stat-label">Options Flow</span></div>
-      <div class="hero-stat"><span class="stat-num">2min</span><span class="stat-label">Refresh Rate</span></div>
-      <div class="hero-stat"><span class="stat-num">24+</span><span class="stat-label">News Sources</span></div>
+      <div class="hero-stat"><span class="stat-num">10</span><span class="stat-label">GARP Picks</span></div>
+      <div class="hero-stat"><span class="stat-num">16</span><span class="stat-label">Options (8+8)</span></div>
+      <div class="hero-stat"><span class="stat-num">13</span><span class="stat-label">Data Sources</span></div>
+      <div class="hero-stat"><span class="stat-num">5min</span><span class="stat-label">Refresh Rate</span></div>
     </div>
   </div>
 </section>
@@ -54,7 +54,7 @@
     <div class="section-header">
       <div>
         <h2>This Week's Top Picks <span class="badge-live">LIVE</span></h2>
-        <p class="section-sub">Scored by momentum · technicals · options flow · sentiment</p>
+        <p class="section-sub">Wall Street GARP: growth · valuation · analyst consensus · 13 data sources</p>
       </div>
       <a href="{{ url_for('signup') }}" class="btn btn-primary">Unlock All 10 →</a>
     </div>
@@ -73,13 +73,21 @@
         <div class="pick-meta">{{ pick.company[:30] }}</div>
         <div class="pick-price-row">
           <span class="price-big">${{ pick.price }}</span>
-          <span class="price-chg {% if pick.pct_gain >= 0 %}pos{% else %}neg{% endif %}">
-            {% if pick.pct_gain >= 0 %}+{% endif %}{{ pick.pct_gain }}%
-          </span>
+          {% if pick.rev_growth %}
+          <span class="price-chg pos" style="font-size:11px;">Rev +{{ pick.rev_growth }}%</span>
+          {% endif %}
+          {% if pick.pe_fwd and pick.pe_fwd > 0 %}
+          <span class="vol-surge-pill">PE {{ pick.pe_fwd }}</span>
+          {% endif %}
         </div>
         <div class="signal-pills">
-          <span class="signal-pill badge-sentiment-{{ pick.sentiment.lower() }}">{{ pick.sentiment }}</span>
-          <span class="signal-pill pill-dim">RSI {{ pick.rsi }}</span>
+          <span class="signal-pill pill-{{ pick.sentiment | lower }}">{{ pick.sentiment }}</span>
+          {% if pick.target_upside and pick.target_upside >= 20 %}
+          <span class="signal-pill pill-green">Target +{{ pick.target_upside }}%</span>
+          {% endif %}
+          {% if pick.earn_growth and pick.earn_growth >= 20 %}
+          <span class="signal-pill pill-green">Earnings +{{ pick.earn_growth }}%</span>
+          {% endif %}
           {% if pick.has_earnings %}<span class="signal-pill pill-neutral">📅 Earnings {{ pick.earnings_date }}</span>{% endif %}
         </div>
         <div class="cp-flow">
@@ -154,33 +162,33 @@
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon">📈</div>
-        <h3>Top 10 Weekly Picks</h3>
-        <p>Composite-scored by momentum, volume surge, RSI, MACD, and options flow. Updated every 2 minutes.</p>
+        <h3>Top 10 GARP Picks</h3>
+        <p>Wall Street-style Growth At Reasonable Price scoring — revenue growth, earnings, valuation, analyst targets, and insider activity.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">📊</div>
-        <h3>Live Options Flow</h3>
-        <p>See call/put volume, ratios, and top contracts per stock. Know what smart money is betting on.</p>
+        <h3>8 Calls + 8 Puts</h3>
+        <p>11-dimension options scoring with directional intel from analysts, insiders, and social sentiment. Diversity guaranteed.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🧠</div>
-        <h3>Technical Signals</h3>
-        <p>RSI, MACD, Golden Cross / Death Cross — auto-computed per stock, every refresh.</p>
+        <h3>13 Data Sources</h3>
+        <p>Yahoo Finance, Finviz, Barchart, Zacks, OpenInsider, StockTwits, CBOE, FRED, CNN Fear & Greed, and more — all fused.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🎯</div>
         <h3>Market Sentiment</h3>
-        <p>Live Fear & Greed gauge, VIX tracking, sector performance heatmap.</p>
+        <p>Live Fear & Greed gauge, VIX tracking, sector performance heatmap, and social momentum signals.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">📅</div>
         <h3>Earnings Calendar</h3>
-        <p>This week's major earnings with EPS estimates and options flow direction per company.</p>
+        <p>This week's major earnings with EPS estimates, beat rates, and options flow direction per company.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">📰</div>
-        <h3>24+ News Sources</h3>
-        <p>Yahoo Finance, Reuters, MarketWatch, CNBC, Bloomberg — aggregated and sorted by recency.</p>
+        <h3>Trending Watchlist</h3>
+        <p>Stocks trending across Finviz, Reddit, Yahoo & social — ranked by multi-source conviction scoring.</p>
       </div>
     </div>
   </div>
@@ -203,7 +211,7 @@
           <li class="locked">✗ Full top 10 picks</li>
           <li class="locked">✗ Calls & puts data</li>
           <li class="locked">✗ Earnings calendar</li>
-          <li class="locked">✗ Technical signals</li>
+          <li class="locked">✗ Trending watchlist</li>
         </ul>
         <a href="{{ url_for('signup') }}" class="btn btn-ghost btn-full">Sign Up Free</a>
       </div>
@@ -212,14 +220,14 @@
         <div class="plan-name">Pro</div>
         <div class="plan-price">$19.99<span class="plan-period">/month</span></div>
         <ul class="plan-features" style="text-align:left">
-          <li>✓ <strong>All 10 weekly picks</strong></li>
-          <li>✓ <strong>Full calls & puts flow</strong></li>
-          <li>✓ <strong>RSI · MACD · MA signals</strong></li>
-          <li>✓ <strong>Live Fear & Greed gauge</strong></li>
+          <li>✓ <strong>All 10 GARP picks</strong></li>
+          <li>✓ <strong>8 calls + 8 puts (intel-scored)</strong></li>
+          <li>✓ <strong>13 fused data sources</strong></li>
+          <li>✓ <strong>Analyst consensus + insider intel</strong></li>
+          <li>✓ <strong>Trending watchlist</strong></li>
+          <li>✓ <strong>Live Fear & Greed + VIX</strong></li>
           <li>✓ <strong>Earnings calendar</strong></li>
           <li>✓ <strong>Sector heatmap</strong></li>
-          <li>✓ <strong>24+ news sources</strong></li>
-          <li>✓ <strong>2-minute data refresh</strong></li>
         </ul>
         <a href="{{ url_for('signup') }}" class="btn btn-primary btn-full">Get Pro Access →</a>
       </div>

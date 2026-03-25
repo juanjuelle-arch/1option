@@ -119,7 +119,7 @@
       <div class="section-hdr">
         <div>
           <h2 class="section-title">🔥 High Conviction Alerts</h2>
-          <p class="section-sub">Multi-source signals: unusual options · Finviz analyst · insider activity · technicals</p>
+          <p class="section-sub">GARP fundamentals · analyst consensus · insider activity · 13 data sources</p>
         </div>
       </div>
       <div class="conviction-list">
@@ -139,9 +139,11 @@
           </div>
           <div class="cv-right">
             <span class="cv-score">{{ pick.score }}/100</span>
-            <span class="price-chg {% if pick.pct_gain >= 0 %}pos{% else %}neg{% endif %}">
-              {% if pick.pct_gain >= 0 %}+{% endif %}{{ pick.pct_gain }}%
-            </span>
+            {% if pick.target_upside %}
+            <span class="price-chg pos" style="font-size:11px;">Target +{{ pick.target_upside }}%</span>
+            {% elif pick.rev_growth %}
+            <span class="price-chg pos" style="font-size:11px;">Rev +{{ pick.rev_growth }}%</span>
+            {% endif %}
           </div>
         </div>
         {% endfor %}
@@ -249,7 +251,7 @@
       <div class="section-hdr">
         <div>
           <h2 class="section-title">Trending Watchlist <span class="badge-live">LIVE</span></h2>
-          <p class="section-sub">Stocks trending across Finviz, Reddit, Yahoo &amp; social — ranked by multi-source conviction</p>
+          <p class="section-sub">Ranked by conviction from 13 sources: analyst consensus · insider activity · social sentiment · Zacks · short squeeze</p>
         </div>
       </div>
 
@@ -338,7 +340,7 @@
       <div class="section-hdr">
         <div>
           <h2 class="section-title">Options Flow <span class="badge-live">LIVE</span></h2>
-          <p class="section-sub">Highest volume contracts across top movers</p>
+          <p class="section-sub">8 best calls + 8 best puts · 11-dimension scoring · 13 data sources · diversity guaranteed</p>
         </div>
         <div class="tab-toggle">
           <button class="tab-btn tab-calls active" onclick="switchTab('calls')">▲ Calls</button>
@@ -362,8 +364,8 @@
                 <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">${{ "{:,.0f}".format(c.last_price * 100) }}</div>
               </div>
               <div style="text-align:center;">
-                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Volume</div>
-                <div style="font-size:13px; font-weight:600;">{{ "{:,}".format(c.volume) }}</div>
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Break Even</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">${{ "%.2f"|format(c.strike + c.last_price) }}</div>
               </div>
               <div style="text-align:right;">
                 <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
@@ -391,8 +393,8 @@
                 <div style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--yellow); font-size:14px;">${{ "{:,.0f}".format(p.last_price * 100) }}</div>
               </div>
               <div style="text-align:center;">
-                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Volume</div>
-                <div style="font-size:13px; font-weight:600;">{{ "{:,}".format(p.volume) }}</div>
+                <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Break Even</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">${{ "%.2f"|format(p.strike - p.last_price) }}</div>
               </div>
               <div style="text-align:right;">
                 <div style="font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;">Expires</div>
