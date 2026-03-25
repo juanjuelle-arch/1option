@@ -1383,18 +1383,45 @@ def get_global_top_options():
     all_calls.sort(key=_rank, reverse=True)
     all_puts.sort(key=_rank, reverse=True)
 
-    def _dedupe(options, limit=5):
+    # Mag 7 tickers — ensure diversity in results
+    MAG7 = {"AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA"}
+
+    def _dedupe_diverse(options, limit=8):
+        """
+        Pick top options with diversity guarantee:
+        - First 5 slots: best overall (any ticker)
+        - Remaining slots: fill with non-Mag7 tickers to ensure 3+ non-Mag7
+        """
         seen = set()
-        result = []
+        top5 = []
+        overflow = []
+
         for opt in options:
             if opt["ticker"] not in seen:
                 seen.add(opt["ticker"])
-                result.append(opt)
-                if len(result) >= limit:
-                    break
-        return result
+                if len(top5) < 5:
+                    top5.append(opt)
+                else:
+                    overflow.append(opt)
 
-    return _dedupe(all_calls, 5), _dedupe(all_puts, 5)
+        # Count non-Mag7 in top 5
+        non_mag7_count = sum(1 for o in top5 if o["ticker"] not in MAG7)
+
+        # If we have fewer than 3 non-Mag7, add more from overflow
+        result = list(top5)
+        needed = max(0, 3 - non_mag7_count)
+        for opt in overflow:
+            if needed <= 0 and len(result) >= limit:
+                break
+            if opt["ticker"] not in MAG7:
+                result.append(opt)
+                needed -= 1
+            elif len(result) < limit:
+                result.append(opt)
+
+        return result[:limit]
+
+    return _dedupe_diverse(all_calls, 8), _dedupe_diverse(all_puts, 8)
 
 
 # ─── Earnings Calendar ───────────────────────────────────────────────────────
