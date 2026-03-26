@@ -575,12 +575,32 @@ def api_performance():
 
 # ─── Stocks Browser ──────────────────────────────────────────────────────────
 
+def _get_fallback_stock_list():
+    """Return a static stock list from built-in data when cache is still warming up."""
+    from data_fetcher import STOCK_UNIVERSE, TICKER_SECTOR_MAP, COMPANY_NAMES
+    fallback = []
+    for ticker in STOCK_UNIVERSE:
+        fallback.append({
+            "ticker": ticker,
+            "name": COMPANY_NAMES.get(ticker, ""),
+            "price": 0.0,
+            "pct_change": 0.0,
+            "positive": True,
+            "sector": TICKER_SECTOR_MAP.get(ticker, "Other"),
+            "sparkline": [],
+        })
+    fallback.sort(key=lambda x: x["ticker"])
+    return fallback
+
 @app.route("/stocks")
 @login_required
 def stocks():
     if not current_user.is_subscribed:
         return redirect(url_for("pricing"))
     stock_list = cache.get("stock_list") or []
+    # Fallback: if cache is still warming up, show static list from built-in data
+    if not stock_list:
+        stock_list = _get_fallback_stock_list()
     return render_template("stocks.html", stocks=stock_list)
 
 @app.route("/stocks/<ticker>")

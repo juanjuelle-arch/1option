@@ -11,7 +11,8 @@
     </div>
     <p style="color:var(--text-dim); font-size:13px; margin-bottom:20px;">
       {% if stocks|length > 0 %}
-        {{ stocks|length }} stocks — click any card for full chart &amp; detail
+        {% set has_prices = stocks[0].price > 0 %}
+        {{ stocks|length }} stocks{% if has_prices %} — click any card for full chart &amp; detail{% else %} — <span class="loading-pulse">live prices loading… will update automatically</span>{% endif %}
       {% else %}
         <span class="loading-pulse">Fetching live market data… refresh in ~2 min</span>
       {% endif %}
@@ -66,9 +67,11 @@
         <!-- Top row: ticker + badge -->
         <div class="sb-top">
           <span class="sb-ticker">{{ s.ticker }}</span>
+          {% if s.price > 0 %}
           <span class="sb-chg {% if s.positive %}pos{% else %}neg{% endif %}">
             {% if s.positive %}+{% endif %}{{ "%.2f"|format(s.pct_change) }}%
           </span>
+          {% endif %}
         </div>
 
         <!-- Company name -->
@@ -98,7 +101,7 @@
         {% endif %}
 
         <!-- Price -->
-        <div class="sb-price">${{ "%.2f"|format(s.price) }}</div>
+        <div class="sb-price">{% if s.price > 0 %}${{ "%.2f"|format(s.price) }}{% else %}<span style="color:var(--text-dim); font-size:11px;">Loading…</span>{% endif %}</div>
       </a>
       {% endfor %}
     </div>
@@ -167,9 +170,13 @@
 
   applyFilters();
 
-  // Auto-reload if no stocks loaded yet (cache still warming up)
-  if (cards.length === 0) {
-    setTimeout(() => { window.location.reload(); }, 30000);
+  // Auto-reload if prices haven't loaded yet (cache still warming up)
+  const hasLivePrices = cards.some(c => {
+    const priceEl = c.querySelector('.sb-price');
+    return priceEl && priceEl.textContent.includes('$');
+  });
+  if (!hasLivePrices) {
+    setTimeout(() => { window.location.reload(); }, 60000);
   }
 })();
 </script>
