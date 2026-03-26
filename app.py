@@ -628,7 +628,26 @@ def stocks():
     # Fallback: if cache is still warming up, show static list from built-in data
     if not stock_list:
         stock_list = _get_fallback_stock_list()
-    return render_template("stocks.html", stocks=stock_list)
+    # Show all if requested, otherwise limit to 200 for fast page load
+    show_all = request.args.get("all") == "1"
+    display_list = stock_list if show_all else stock_list[:200]
+    return render_template("stocks.html", stocks=display_list, total_count=len(stock_list))
+
+@app.route("/api/stocks/search")
+@login_required
+@limiter.limit("60 per minute")
+def api_stock_search():
+    """Search stocks by ticker or name — returns up to 50 matches."""
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    q = request.args.get("q", "").strip().lower()
+    if not q or len(q) < 1:
+        return jsonify([])
+    stock_list = cache.get("stock_list") or _get_fallback_stock_list()
+    matches = [s for s in stock_list
+               if q in s["ticker"].lower() or q in s.get("name", "").lower()
+               or q in s.get("sector", "").lower()]
+    return jsonify(matches[:50])
 
 @app.route("/stocks/<ticker>")
 @login_required

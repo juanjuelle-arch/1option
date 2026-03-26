@@ -10,9 +10,9 @@
       <span class="badge-live">LIVE</span>
     </div>
     <p style="color:var(--text-dim); font-size:13px; margin-bottom:20px;">
-      {% if stocks|length > 0 %}
-        {% set has_prices = stocks[0].price > 0 %}
-        {{ stocks|length }} stocks{% if has_prices %} — click any card for full chart &amp; detail{% else %} — <span class="loading-pulse">live prices loading… will update automatically</span>{% endif %}
+      {% if total_count > 0 %}
+        {% set has_prices = stocks[0].price > 0 if stocks|length > 0 else false %}
+        {{ total_count }} stocks{% if has_prices %} — click any card for full chart &amp; detail{% else %} — <span class="loading-pulse">live prices loading… will update automatically</span>{% endif %}
       {% else %}
         <span class="loading-pulse">Fetching live market data… refresh in ~2 min</span>
       {% endif %}
@@ -54,7 +54,7 @@
 
     <!-- Stock grid -->
     <div class="sb-grid" id="stocksGrid">
-      {% for s in stocks %}
+      {% for s in stocks[:200] %}
       {% set spark = s.sparkline if s.sparkline else [] %}
       <a
         class="sb-card {% if s.positive %}sb-card--up{% else %}sb-card--dn{% endif %}"
@@ -64,7 +64,6 @@
         data-sector="{{ s.sector }}"
         data-pct="{{ s.pct_change }}"
       >
-        <!-- Top row: ticker + badge -->
         <div class="sb-top">
           <span class="sb-ticker">{{ s.ticker }}</span>
           {% if s.price > 0 %}
@@ -73,16 +72,10 @@
           </span>
           {% endif %}
         </div>
-
-        <!-- Company name -->
         {% if s.name %}
         <div class="sb-name">{{ s.name }}</div>
         {% endif %}
-
-        <!-- Sector pill -->
         <div class="sb-sector">{{ s.sector }}</div>
-
-        <!-- Sparkline SVG -->
         {% if spark|length >= 2 %}
         <div class="sb-spark-wrap">
           <svg class="sb-spark" viewBox="0 0 80 30" preserveAspectRatio="none">
@@ -92,18 +85,30 @@
               stroke-width="1.8"
               stroke-linecap="round"
               stroke-linejoin="round"
-              points="{% for v in spark %}{{ loop.index0 * (80 / (spark|length - 1)) | round(1) }},{{ (30 - v * 0.27) | round(1) }} {% endfor %}"
+              points="{% for v in spark %}{{ loop.index0 * (80 / ([spark|length - 1, 1]|max)) | round(1) }},{{ (30 - v * 0.27) | round(1) }} {% endfor %}"
             />
           </svg>
         </div>
         {% else %}
         <div class="sb-spark-wrap" style="height:32px;"></div>
         {% endif %}
-
-        <!-- Price -->
         <div class="sb-price">{% if s.price > 0 %}${{ "%.2f"|format(s.price) }}{% else %}<span style="color:var(--text-dim); font-size:11px;">Loading…</span>{% endif %}</div>
       </a>
       {% endfor %}
+    </div>
+
+    <!-- Load More button -->
+    {% if total_count > 200 %}
+    <div id="loadMoreWrap" style="text-align:center; margin-top:24px;">
+      <button id="loadMoreBtn" class="btn btn-ghost" style="padding:10px 32px; font-size:13px;">
+        Show More Stocks ({{ total_count - 200 }} remaining)
+      </button>
+    </div>
+    {% endif %}
+
+    <!-- Search results from API -->
+    <div id="searchResults" style="display:none;">
+      <div class="sb-grid" id="searchGrid"></div>
     </div>
 
     <!-- Empty state -->
@@ -122,19 +127,71 @@
   const search   = document.getElementById('stockSearch');
   const tabs     = document.querySelectorAll('.sector-tab');
   const sortBtns = document.querySelectorAll('.sort-btn');
+  const searchResults = document.getElementById('searchResults');
+  const searchGrid = document.getElementById('searchGrid');
+  const loadMoreWrap = document.getElementById('loadMoreWrap');
 
   let activeSector = 'all';
   let activeSort   = 'gainers';
   let searchVal    = '';
+  let searchTimeout = null;
+
+  function makeCard(s) {
+    const pos = s.pct_change >= 0;
+    const spark = s.sparkline || [];
+    let sparkSvg = '';
+    if (spark.length >= 2) {
+      const pts = spark.map((v, i) => {
+        const x = (i * (80 / Math.max(spark.length - 1, 1))).toFixed(1);
+        const y = (30 - v * 0.27).toFixed(1);
+        return x + ',' + y;
+      }).join(' ');
+      sparkSvg = '<div class="sb-spark-wrap"><svg class="sb-spark" viewBox="0 0 80 30" preserveAspectRatio="none"><polyline fill="none" stroke="' + (pos ? '#00d4aa' : '#ff4757') + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/></svg></div>';
+    } else {
+      sparkSvg = '<div class="sb-spark-wrap" style="height:32px;"></div>';
+    }
+    const priceHtml = s.price > 0 ? '$' + s.price.toFixed(2) : '<span style="color:var(--text-dim);font-size:11px;">Loading…</span>';
+    const chgHtml = s.price > 0 ? '<span class="sb-chg ' + (pos ? 'pos' : 'neg') + '">' + (pos ? '+' : '') + s.pct_change.toFixed(2) + '%</span>' : '';
+    return '<a class="sb-card ' + (pos ? 'sb-card--up' : 'sb-card--dn') + '" href="/stocks/' + s.ticker + '" data-ticker="' + s.ticker + '" data-name="' + (s.name||'').toLowerCase() + '" data-sector="' + s.sector + '" data-pct="' + s.pct_change + '">'
+      + '<div class="sb-top"><span class="sb-ticker">' + s.ticker + '</span>' + chgHtml + '</div>'
+      + (s.name ? '<div class="sb-name">' + s.name + '</div>' : '')
+      + '<div class="sb-sector">' + s.sector + '</div>'
+      + sparkSvg
+      + '<div class="sb-price">' + priceHtml + '</div></a>';
+  }
 
   function applyFilters() {
+    if (searchVal.length >= 1) {
+      // Use API search for typed queries
+      grid.style.display = 'none';
+      searchResults.style.display = 'block';
+      if (loadMoreWrap) loadMoreWrap.style.display = 'none';
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(function() {
+        fetch('/api/stocks/search?q=' + encodeURIComponent(searchVal))
+          .then(r => r.json())
+          .then(results => {
+            // Apply sector filter
+            let filtered = activeSector === 'all' ? results : results.filter(s => s.sector === activeSector);
+            // Apply sort
+            if (activeSort === 'gainers') filtered.sort((a,b) => b.pct_change - a.pct_change);
+            else if (activeSort === 'losers') filtered.sort((a,b) => a.pct_change - b.pct_change);
+            else filtered.sort((a,b) => a.ticker.localeCompare(b.ticker));
+            searchGrid.innerHTML = filtered.map(makeCard).join('');
+            noRes.style.display = filtered.length === 0 ? 'block' : 'none';
+          });
+      }, 300);
+      return;
+    }
+
+    // No search — use pre-rendered cards
+    grid.style.display = '';
+    searchResults.style.display = 'none';
+    if (loadMoreWrap) loadMoreWrap.style.display = '';
+
     let visible = cards.filter(c => {
-      const ticker = c.dataset.ticker.toLowerCase();
-      const sector = c.dataset.sector.toLowerCase();
-      const name   = (c.dataset.name || '').toLowerCase();
-      const matchSearch = !searchVal || ticker.includes(searchVal) || sector.includes(searchVal) || name.includes(searchVal);
       const matchSector = activeSector === 'all' || c.dataset.sector === activeSector;
-      return matchSearch && matchSector;
+      return matchSector;
     });
 
     if (activeSort === 'gainers') {
@@ -168,14 +225,30 @@
     });
   });
 
+  // Load More: fetch remaining stocks via API
+  var loadMoreBtn = document.getElementById('loadMoreBtn');
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', function() {
+      loadMoreBtn.textContent = 'Loading…';
+      loadMoreBtn.disabled = true;
+      fetch('/api/stocks/search?q=')
+        .then(r => r.json())
+        .then(function(allStocks) {
+          // allStocks is empty for empty query; we need a different approach
+          // Instead, fetch sector by sector or just reload with all=true
+          window.location.href = '/stocks?all=1';
+        });
+    });
+  }
+
   applyFilters();
 
-  // Auto-reload if prices haven't loaded yet (cache still warming up)
+  // Auto-reload if prices haven't loaded yet
   const hasLivePrices = cards.some(c => {
     const priceEl = c.querySelector('.sb-price');
     return priceEl && priceEl.textContent.includes('$');
   });
-  if (!hasLivePrices) {
+  if (!hasLivePrices && cards.length > 0) {
     setTimeout(() => { window.location.reload(); }, 60000);
   }
 })();

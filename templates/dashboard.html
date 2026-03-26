@@ -130,15 +130,9 @@
         </div>
         {% endif %}
         {% for pick in picks %}
-        <div class="pick-card pick-card--full {% if pick.conviction in ['EXTREME', 'HIGH'] %}pick-card--hot{% endif %}">
+        <div class="pick-card pick-card--full">
           {% if pick.has_earnings %}
           <div class="pick-earnings-pin">📅 {{ pick.earnings_date }}</div>
-          {% endif %}
-
-          {% if pick.conviction in ['EXTREME', 'HIGH'] %}
-          <div class="pick-conviction-badge conviction-badge-{{ pick.conviction | lower }}">
-            {% if pick.conviction == 'EXTREME' %}🔥{% else %}⚡{% endif %} {{ pick.conviction }}
-          </div>
           {% endif %}
 
           <div class="pick-top-row">
