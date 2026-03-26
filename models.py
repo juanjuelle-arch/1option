@@ -1,5 +1,6 @@
 """
-models.py — SQLite User model with subscription status.
+models.py — User model with subscription status.
+Supports PostgreSQL (production) and SQLite (local dev).
 """
 
 from flask_sqlalchemy import SQLAlchemy
@@ -9,6 +10,7 @@ from datetime import datetime, timezone
 
 db = SQLAlchemy()
 
+
 class User(UserMixin, db.Model):
     __table_args__ = (db.Index('ix_user_email', 'email'),)
 
@@ -17,7 +19,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     is_subscribed = db.Column(db.Boolean, default=False)
-    stripe_customer_id = db.Column(db.String(100), nullable=True)
+    stripe_customer_id = db.Column(db.String(100), nullable=True, index=True)
     stripe_subscription_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 

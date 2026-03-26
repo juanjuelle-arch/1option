@@ -1,6 +1,7 @@
 """
 app.py — 1.OPTION Flask application
 Routes: landing, dashboard, auth, Stripe, API endpoints
+Production-ready: PostgreSQL, Redis cache, gzip, health checks
 """
 
 import os
@@ -13,6 +14,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_compress import Compress
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
@@ -28,32 +30,51 @@ try:
     from trending import get_trending_watchlist
 except ImportError:
     get_trending_watchlist = None
-from scheduler import start_scheduler, refresh_main as refresh_all
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 IS_PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+IS_WORKER = os.environ.get("DYNO_TYPE") == "worker" or os.environ.get("IS_WORKER") == "true"
 
 # ─── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
 
-# C-4: Hard error if SECRET_KEY not set in production
+# Gzip compression — 60-80% bandwidth savings
+Compress(app)
+
+# Secret key
 _secret = os.environ.get("SECRET_KEY", "")
 if IS_PRODUCTION and not _secret:
     raise RuntimeError("SECRET_KEY environment variable must be set in production!")
 app.secret_key = _secret or os.urandom(32).hex()
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///1option.db"
+# ─── Database Config (PostgreSQL in production, SQLite locally) ──────────────
+
+_db_url = os.environ.get("DATABASE_URL", "sqlite:///1option.db")
+# Railway PostgreSQL uses postgres:// but SQLAlchemy requires postgresql://
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# M-10: Only disable static caching in dev
+# Connection pooling for PostgreSQL
+if "postgresql" in _db_url:
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_size": 5,
+        "pool_recycle": 300,
+        "pool_pre_ping": True,
+        "max_overflow": 10,
+    }
+
+# Only disable static caching in dev
 if not IS_PRODUCTION:
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # ─── Security Config ─────────────────────────────────────────────────────────
+
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
@@ -63,22 +84,25 @@ if IS_PRODUCTION:
 # CSRF protection
 csrf = CSRFProtect(app)
 
-# Rate limiting
+# Rate limiting — Redis-backed in production, memory locally
+_redis_url = os.environ.get("REDIS_URL", "")
+_limiter_storage = _redis_url if _redis_url else "memory://"
+
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "60 per hour"],
-    storage_uri="memory://",
+    storage_uri=_limiter_storage,
 )
 
-# L-3: Ticker validation — support both BRK-B and BRK.B formats
+# Ticker validation
 TICKER_RE = re.compile(r"^[A-Z0-9]{1,5}([.\-][A-Z]{1,2})?$")
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "5y"}
 
-# H-3: Email validation pattern
+# Email validation
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# M-9: Dummy hash for constant-time login
+# Dummy hash for constant-time login
 _DUMMY_HASH = generate_password_hash("dummy_password_for_timing", method='pbkdf2:sha256')
 
 @app.after_request
@@ -99,7 +123,6 @@ def add_headers(response):
     )
     if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # M-10: Cache static files in production (1 hour), no-cache in dev
     if request.path.startswith("/static/"):
         if IS_PRODUCTION:
             response.headers["Cache-Control"] = "public, max-age=3600"
@@ -107,7 +130,7 @@ def add_headers(response):
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
-# M-5: Force HTTPS in production
+# Force HTTPS in production
 @app.before_request
 def force_https():
     if IS_PRODUCTION and not request.is_secure and request.headers.get("X-Forwarded-Proto", "http") != "https":
@@ -125,25 +148,47 @@ login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Please log in to access the dashboard."
 
-# H-1: Use db.session.get() instead of deprecated User.query.get()
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
-# ─── Init DB + Seed Cache ────────────────────────────────────────────────────
+# ─── Init DB ────────────────────────────────────────────────────────────────
 
 with app.app_context():
     db.create_all()
 
-# Do initial cache load in background so app starts fast
-import threading
-def _initial_load():
-    with app.app_context():
-        refresh_all()
-threading.Thread(target=_initial_load, daemon=True).start()
+# ─── Scheduler: only run in web process if no separate worker ────────────────
 
-# Start refresh scheduler
-_scheduler = start_scheduler()
+_RUN_SCHEDULER = os.environ.get("DISABLE_SCHEDULER", "").lower() != "true"
+
+if _RUN_SCHEDULER and not IS_WORKER:
+    from scheduler import start_scheduler, refresh_main as refresh_all
+    import threading
+    def _initial_load():
+        with app.app_context():
+            refresh_all()
+    threading.Thread(target=_initial_load, daemon=True).start()
+    _scheduler = start_scheduler()
+    logger.info("Scheduler started in web process")
+
+# ─── Health Check ────────────────────────────────────────────────────────────
+
+@app.route("/health")
+@csrf.exempt
+def health():
+    """Health check for Railway monitoring."""
+    status = {
+        "status": "ok",
+        "redis": cache.is_redis_connected(),
+        "database": "postgresql" if "postgresql" in str(app.config["SQLALCHEMY_DATABASE_URI"]) else "sqlite",
+    }
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        status["db_connected"] = True
+    except Exception:
+        status["db_connected"] = False
+        status["status"] = "degraded"
+    return jsonify(status), 200 if status["status"] == "ok" else 503
 
 # ─── Context Processor ───────────────────────────────────────────────────────
 
@@ -183,11 +228,9 @@ def signup():
         if not name or not email or not password:
             flash("All fields are required.", "error")
             return render_template("signup.html")
-        # H-4: Name length cap
         if len(name) > 100:
             flash("Name is too long (max 100 characters).", "error")
             return render_template("signup.html")
-        # H-3: Server-side email validation
         if not EMAIL_RE.match(email):
             flash("Please enter a valid email address.", "error")
             return render_template("signup.html")
@@ -222,27 +265,23 @@ def login():
             login_user(user)
             session.permanent = True
             next_page = request.args.get("next")
-            # Prevent open redirect: validate with urlparse
             if next_page:
                 parsed = urlparse(next_page)
                 if parsed.netloc or parsed.scheme or next_page.startswith("//"):
                     next_page = None
             return redirect(next_page or url_for("dashboard"))
-        # M-9: Constant-time response — always run hash check even if user not found
         if not user:
             check_password_hash(_DUMMY_HASH, password)
         logger.warning(f"Failed login attempt for {email} from {request.remote_addr}")
         flash("Invalid email or password.", "error")
     return render_template("login.html")
 
-# H-5: Logout is POST-only to prevent CSRF logout attacks
 @app.route("/logout", methods=["POST"])
 @login_required
 def logout():
     logout_user()
     return redirect(url_for("index"))
 
-# Keep GET logout as a fallback redirect (nav links)
 @app.route("/logout", methods=["GET"])
 @login_required
 def logout_get():
@@ -280,7 +319,6 @@ def dashboard():
 @login_required
 def create_checkout_session():
     if not stripe.api_key or not STRIPE_PRICE_ID:
-        # C-1: Demo mode — only grant access if DEMO_MODE env var is explicitly set
         if os.environ.get("DEMO_MODE", "").lower() == "true":
             current_user.is_subscribed = True
             db.session.commit()
@@ -305,13 +343,11 @@ def create_checkout_session():
         flash("Payment setup failed. Please try again.", "error")
         return redirect(url_for("pricing"))
 
-# C-1: Payment success now requires valid Stripe session — no free bypass
 @app.route("/payment-success")
 @login_required
 def payment_success():
     session_id = request.args.get("session_id")
     if not session_id or not stripe.api_key:
-        # No valid session — redirect to pricing without granting access
         flash("Payment could not be verified. Please try again.", "error")
         return redirect(url_for("pricing"))
     try:
@@ -331,7 +367,6 @@ def payment_success():
         flash("Payment verification failed. Please contact support.", "error")
         return redirect(url_for("pricing"))
 
-# H-8: Stripe webhook handles subscription deletion AND payment failures
 @app.route("/webhook", methods=["POST"])
 @csrf.exempt
 def stripe_webhook():
@@ -372,7 +407,7 @@ def stripe_webhook():
         return jsonify({"error": "Webhook error"}), 400
     return jsonify({"status": "ok"})
 
-# ─── API Endpoints (live data for JS polling) ────────────────────────────────
+# ─── API Endpoints ───────────────────────────────────────────────────────────
 
 @app.route("/api/market")
 def api_market():
@@ -395,12 +430,9 @@ def api_sentiment():
         return jsonify({"error": "Subscription required"}), 403
     return jsonify(cache.get("sentiment") or {})
 
-# ─── Options & Intelligence APIs ─────────────────────────────────────────────
-
 @app.route("/api/options")
 @login_required
 def api_options_global():
-    """Top calls & puts across all tickers — diversified, scored."""
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     try:
@@ -425,7 +457,6 @@ def api_options_global():
 @app.route("/api/options/<ticker>")
 @login_required
 def api_options_ticker(ticker):
-    """Full options chain for a specific ticker — scored & ranked."""
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     ticker = ticker.upper()
@@ -453,7 +484,6 @@ def api_options_ticker(ticker):
 @app.route("/api/intel/<ticker>")
 @login_required
 def api_intel_ticker(ticker):
-    """Full multi-source intelligence profile for a ticker."""
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     ticker = ticker.upper()
@@ -470,7 +500,6 @@ def api_intel_ticker(ticker):
 
 @app.route("/api/market/vix")
 def api_vix():
-    """Public VIX + market-wide put/call ratio."""
     try:
         if get_cboe_pc_ratio:
             data = get_cboe_pc_ratio()
@@ -483,7 +512,6 @@ def api_vix():
 @app.route("/api/trending")
 @login_required
 def api_trending():
-    """Trending watchlist — tickers trending across multiple sources."""
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     trending = cache.get("trending") or []
@@ -495,13 +523,11 @@ def api_trending():
             logger.error(f"API trending: {e}")
     return jsonify({"trending": trending, "updated_at": cache.get_updated_at("trending")})
 
-# ─── Demo Access (secured) ───────────────────────────────────────────────────
+# ─── Demo Access ─────────────────────────────────────────────────────────────
 
-# C-2: Demo access always requires DEMO_TOKEN — no debug bypass
 @app.route("/demo-access")
 @limiter.limit("3 per minute")
 def demo_access():
-    """Direct demo access — requires DEMO_TOKEN env var. No debug bypass."""
     demo_token = os.environ.get("DEMO_TOKEN", "")
     if not demo_token or request.args.get("token") != demo_token:
         abort(404)
@@ -514,7 +540,7 @@ def demo_access():
     login_user(user)
     return redirect(url_for("dashboard"))
 
-# ─── Stocks Browser ────────────────────────────────────────────────────────
+# ─── Stocks Browser ──────────────────────────────────────────────────────────
 
 @app.route("/stocks")
 @login_required
@@ -552,12 +578,10 @@ def api_stock_chart(ticker):
     if not TICKER_RE.match(ticker):
         return jsonify({"error": "Invalid ticker"}), 400
     period = request.args.get("period", "1mo")
-    # M-6: Return 400 for invalid period instead of silent fallback
     if period not in VALID_PERIODS:
         return jsonify({"error": f"Invalid period. Valid: {', '.join(sorted(VALID_PERIODS))}"}), 400
     data = data_fetcher.get_stock_chart(ticker, period)
     return jsonify(data)
-
 
 # ─── Error Handlers ──────────────────────────────────────────────────────────
 
@@ -574,9 +598,8 @@ def internal_error(e):
 def rate_limited(e):
     return render_template("errors/429.html"), 429
 
-# ─── Static Security Files ──────────────────────────────────────────────────
+# ─── Static Files ────────────────────────────────────────────────────────────
 
-# L-6: Use app.static_folder for reliable path resolution
 @app.route("/robots.txt")
 def robots():
     return send_from_directory(app.static_folder, "robots.txt")
