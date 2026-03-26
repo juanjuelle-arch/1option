@@ -99,6 +99,29 @@ def refresh_pick_prices():
         logger.warning(f"Pick price update error: {e}")
 
 
+def refresh_option_prices():
+    """Update current prices for all tracked options. Runs every 15 min."""
+    logger.info("Updating tracked option prices...")
+    try:
+        from flask import current_app
+        from models import db, OptionSnapshot
+        from option_tracker import update_option_prices
+
+        if current_app:
+            update_option_prices(db, OptionSnapshot)
+    except RuntimeError:
+        try:
+            from app import app
+            from models import db, OptionSnapshot
+            from option_tracker import update_option_prices
+            with app.app_context():
+                update_option_prices(db, OptionSnapshot)
+        except Exception as e:
+            logger.debug(f"Option price update skipped: {e}")
+    except Exception as e:
+        logger.warning(f"Option price update error: {e}")
+
+
 def refresh_options():
     """Refresh global top calls/puts (full intel from all 13 sources). Runs every 5 min."""
     logger.info("Refreshing options with full intel...")
@@ -107,8 +130,33 @@ def refresh_options():
         cache.set("top_calls", top_calls)
         cache.set("top_puts", top_puts)
         logger.info(f"Options cached: {len(top_calls)} calls, {len(top_puts)} puts")
+
+        # Snapshot options for performance tracking
+        _snapshot_options(top_calls, top_puts)
     except Exception as e:
         logger.error(f"Options refresh failed: {e}")
+
+
+def _snapshot_options(calls, puts):
+    """Save option snapshots to database for performance tracking."""
+    try:
+        from flask import current_app
+        from models import db, OptionSnapshot
+        from option_tracker import snapshot_options
+
+        if current_app:
+            snapshot_options(calls, puts, db, OptionSnapshot)
+    except RuntimeError:
+        try:
+            from app import app
+            from models import db, OptionSnapshot
+            from option_tracker import snapshot_options
+            with app.app_context():
+                snapshot_options(calls, puts, db, OptionSnapshot)
+        except Exception as e:
+            logger.debug(f"Option snapshot skipped (no app context): {e}")
+    except Exception as e:
+        logger.warning(f"Option snapshot error: {e}")
 
 
 def refresh_trending():
@@ -119,8 +167,56 @@ def refresh_trending():
             trending = get_trending_watchlist()
             cache.set("trending", trending)
             logger.info(f"Trending cached: {len(trending)} tickers")
+
+            # Snapshot trending for performance tracking
+            _snapshot_trending(trending)
     except Exception as e:
         logger.error(f"Trending refresh failed: {e}")
+
+
+def _snapshot_trending(trending_list):
+    """Save trending snapshots to database for performance tracking."""
+    try:
+        from flask import current_app
+        from models import db, TrendingSnapshot
+        from trending_tracker import snapshot_trending
+
+        if current_app:
+            snapshot_trending(trending_list, db, TrendingSnapshot)
+    except RuntimeError:
+        try:
+            from app import app
+            from models import db, TrendingSnapshot
+            from trending_tracker import snapshot_trending
+            with app.app_context():
+                snapshot_trending(trending_list, db, TrendingSnapshot)
+        except Exception as e:
+            logger.debug(f"Trending snapshot skipped (no app context): {e}")
+    except Exception as e:
+        logger.warning(f"Trending snapshot error: {e}")
+
+
+def refresh_trending_prices():
+    """Update current prices for all tracked trending tickers. Runs every 15 min."""
+    logger.info("Updating tracked trending prices...")
+    try:
+        from flask import current_app
+        from models import db, TrendingSnapshot
+        from trending_tracker import update_trending_prices
+
+        if current_app:
+            update_trending_prices(db, TrendingSnapshot)
+    except RuntimeError:
+        try:
+            from app import app
+            from models import db, TrendingSnapshot
+            from trending_tracker import update_trending_prices
+            with app.app_context():
+                update_trending_prices(db, TrendingSnapshot)
+        except Exception as e:
+            logger.debug(f"Trending price update skipped: {e}")
+    except Exception as e:
+        logger.warning(f"Trending price update error: {e}")
 
 
 def refresh_stocks():
@@ -150,8 +246,10 @@ def start_scheduler():
     scheduler.add_job(refresh_trending, "interval", minutes=5, id="refresh_trending",
                       next_run_time=None)
 
-    # Pick price updates — every 15 min
+    # Pick + option price updates — every 15 min
     scheduler.add_job(refresh_pick_prices, "interval", minutes=15, id="refresh_pick_prices")
+    scheduler.add_job(refresh_option_prices, "interval", minutes=15, id="refresh_option_prices")
+    scheduler.add_job(refresh_trending_prices, "interval", minutes=15, id="refresh_trending_prices")
 
     # Stock browser — every 30 min (5300+ tickers takes time to download)
     scheduler.add_job(refresh_stocks, "interval", minutes=30, id="refresh_stocks")

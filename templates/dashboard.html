@@ -112,45 +112,6 @@
     </div>
     {% endif %}
 
-    <!-- ─── High Conviction Alerts ────────────────────────────────────────────── -->
-    {% set hot_picks = picks | selectattr('conviction', 'in', ['EXTREME', 'HIGH']) | list %}
-    {% if hot_picks %}
-    <div class="dash-section conviction-section">
-      <div class="section-hdr">
-        <div>
-          <h2 class="section-title">🔥 High Conviction Alerts</h2>
-          <p class="section-sub">GARP fundamentals · analyst consensus · insider activity · 13 data sources</p>
-        </div>
-      </div>
-      <div class="conviction-list">
-        {% for pick in hot_picks %}
-        <div class="conviction-row conviction-{{ pick.conviction | lower }}">
-          <div class="cv-left">
-            <span class="cv-rank">#{{ loop.index }}</span>
-            <span class="cv-ticker">{{ pick.ticker }}</span>
-            <span class="cv-badge cv-badge-{{ pick.conviction | lower }}">
-              {% if pick.conviction == 'EXTREME' %}🔥{% else %}⚡{% endif %} {{ pick.conviction }}
-            </span>
-          </div>
-          <div class="cv-signals">
-            {% for sig in pick.signals %}
-            <span class="cv-signal-tag">{{ sig }}</span>
-            {% endfor %}
-          </div>
-          <div class="cv-right">
-            <span class="cv-score">{{ pick.score }}/100</span>
-            {% if pick.target_upside %}
-            <span class="price-chg pos" style="font-size:11px;">Target +{{ pick.target_upside }}%</span>
-            {% elif pick.rev_growth %}
-            <span class="price-chg pos" style="font-size:11px;">Rev +{{ pick.rev_growth }}%</span>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
     <!-- ─── Top 10 Picks ──────────────────────────────────────────────────────── -->
     <div class="dash-section">
       <div class="section-hdr">
@@ -164,7 +125,8 @@
         {% if not picks %}
         <div style="grid-column:1/-1; text-align:center; padding:48px; color:var(--text-dim);">
           <div style="font-size:2rem; margin-bottom:12px;">📊</div>
-          <p>Loading picks data... refresh in a moment.</p>
+          <p class="loading-pulse">Analyzing 5,299 stocks across 13 data sources... picks will appear shortly.</p>
+          <script>setTimeout(function(){ window.location.reload(); }, 30000);</script>
         </div>
         {% endif %}
         {% for pick in picks %}

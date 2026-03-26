@@ -39,10 +39,11 @@ def snapshot_picks(picks, db, PickSnapshot):
         if existing:
             # Update current price
             existing.current_price = price
-            if price > (existing.peak_price or 0):
-                existing.peak_price = price
-                existing.peak_return = round((price - existing.entry_price) / existing.entry_price * 100, 2)
-            existing.pct_return = round((price - existing.entry_price) / existing.entry_price * 100, 2)
+            if existing.entry_price and existing.entry_price > 0:
+                if price > (existing.peak_price or 0):
+                    existing.peak_price = price
+                    existing.peak_return = round((price - existing.entry_price) / existing.entry_price * 100, 2)
+                existing.pct_return = round((price - existing.entry_price) / existing.entry_price * 100, 2)
             continue
 
         # Check if this ticker was picked recently (within last 7 days) and still active

@@ -20,7 +20,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
 import cache
 import data_fetcher
-from models import db, User, PickSnapshot
+from models import db, User, PickSnapshot, OptionSnapshot, TrendingSnapshot
 try:
     from market_scraper import get_enriched_ticker_profile, get_cboe_pc_ratio
 except ImportError:
@@ -548,8 +548,12 @@ def performance():
     if not current_user.is_subscribed:
         return redirect(url_for("pricing"))
     from pick_tracker import get_performance_stats
-    stats = get_performance_stats(PickSnapshot)
-    return render_template("performance.html", stats=stats)
+    from option_tracker import get_options_performance_stats
+    from trending_tracker import get_trending_performance_stats
+    pick_stats = get_performance_stats(PickSnapshot)
+    option_stats = get_options_performance_stats(OptionSnapshot)
+    trending_stats = get_trending_performance_stats(TrendingSnapshot)
+    return render_template("performance.html", stats=pick_stats, opt_stats=option_stats, trend_stats=trending_stats)
 
 @app.route("/api/performance")
 @login_required
@@ -557,20 +561,33 @@ def api_performance():
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
     from pick_tracker import get_performance_stats
-    stats = get_performance_stats(PickSnapshot)
+    from option_tracker import get_options_performance_stats
+    from trending_tracker import get_trending_performance_stats
+    pick_stats = get_performance_stats(PickSnapshot)
+    option_stats = get_options_performance_stats(OptionSnapshot)
+    trending_stats = get_trending_performance_stats(TrendingSnapshot)
     return jsonify({
-        "total_picks": stats["total_picks"],
-        "win_rate": stats["win_rate"],
-        "avg_return": stats["avg_return"],
-        "winners": stats["winners"],
-        "losers": stats["losers"],
-        "active_picks": [
-            {"ticker": p.ticker, "company": p.company, "entry_price": p.entry_price,
-             "current_price": p.current_price, "pct_return": p.pct_return,
-             "peak_return": p.peak_return, "score": p.score, "conviction": p.conviction,
-             "picked_date": str(p.picked_date)}
-            for p in stats["active_picks"]
-        ],
+        "picks": {
+            "total_picks": pick_stats["total_picks"],
+            "win_rate": pick_stats["win_rate"],
+            "avg_return": pick_stats["avg_return"],
+            "winners": pick_stats["winners"],
+            "losers": pick_stats["losers"],
+        },
+        "options": {
+            "total_options": option_stats["total_options"],
+            "total_calls": option_stats["total_calls"],
+            "total_puts": option_stats["total_puts"],
+            "win_rate": option_stats["win_rate"],
+            "avg_return": option_stats["avg_return"],
+        },
+        "trending": {
+            "total_tracked": trending_stats["total_tracked"],
+            "win_rate": trending_stats["win_rate"],
+            "avg_return": trending_stats["avg_return"],
+            "winners": trending_stats["winners"],
+            "losers": trending_stats["losers"],
+        },
     })
 
 # ─── Stocks Browser ──────────────────────────────────────────────────────────

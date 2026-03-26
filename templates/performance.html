@@ -1,16 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Pick Performance — 1.OPTION{% endblock %}
+{% block title %}Track Record — 1.OPTION{% endblock %}
 
 {% block content %}
 <div class="container" style="padding-top:28px; padding-bottom:64px;">
 
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px;">
-    <h1 class="section-title" style="margin-bottom:0;">Pick Performance</h1>
+    <h1 class="section-title" style="margin-bottom:0;">Track Record</h1>
     <span class="badge-live">LIVE</span>
   </div>
   <p style="color:var(--text-dim); font-size:13px; margin-bottom:28px;">
-    Real-time track record of every GARP pick — entry price, current price, and returns
+    Real-time track record — stock picks, options flow, and trending watchlist with live returns
   </p>
+
+  <!-- ─── Section Toggle ─────────────────────────────────────────────────── -->
+  <div style="display:flex; gap:8px; margin-bottom:28px;">
+    <button class="tf-btn active" id="btnStocks" onclick="showSection('stocks')">Stock Picks</button>
+    <button class="tf-btn" id="btnOptions" onclick="showSection('options')">Options Flow</button>
+    <button class="tf-btn" id="btnTrending" onclick="showSection('trending')">Trending Watchlist</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  STOCK PICKS TRACK RECORD                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="sectionStocks">
 
   <!-- ─── Stats Cards ──────────────────────────────────────────────────── -->
   <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:12px; margin-bottom:32px;">
@@ -129,14 +141,301 @@
   </div>
   {% endif %}
 
-  <!-- ─── Empty State ───────────────────────────────────────────────────── -->
+  <!-- ─── Empty State (Stocks) ───────────────────────────────────────────── -->
   {% if stats.total_picks == 0 %}
   <div style="text-align:center; padding:64px; color:var(--text-dim);">
     <div style="font-size:3rem; margin-bottom:16px;">📊</div>
-    <h3 style="color:var(--text); margin-bottom:8px;">Performance tracking has started</h3>
+    <h3 style="color:var(--text); margin-bottom:8px;">Stock pick tracking has started</h3>
     <p>Picks are being recorded with entry prices. Check back soon to see returns as prices move.</p>
   </div>
   {% endif %}
 
+  </div><!-- end sectionStocks -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  OPTIONS FLOW TRACK RECORD                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="sectionOptions" style="display:none;">
+
+  <!-- ─── Options Stats Cards ─────────────────────────────────────────────── -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; margin-bottom:32px;">
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Total Options</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--text);">{{ opt_stats.total_options }}</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Calls Tracked</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green);">{{ opt_stats.total_calls }}</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Puts Tracked</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--red);">{{ opt_stats.total_puts }}</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Win Rate</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:{% if opt_stats.win_rate >= 50 %}var(--green){% else %}var(--red){% endif %};">{{ opt_stats.win_rate }}%</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Avg Return</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:{% if opt_stats.avg_return >= 0 %}var(--green){% else %}var(--red){% endif %};">{% if opt_stats.avg_return >= 0 %}+{% endif %}{{ opt_stats.avg_return }}%</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Winners</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green);">{{ opt_stats.winners }}</div>
+    </div>
+  </div>
+
+  <!-- ─── Best / Worst Option ──────────────────────────────────────────── -->
+  {% if opt_stats.best_option %}
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:32px;">
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-left:3px solid var(--green); border-radius:12px; padding:18px;">
+      <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Best Option</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">{{ opt_stats.best_option.ticker }}</span>
+          <span style="color:var(--green); font-size:12px; margin-left:6px;">${{ "%.0f"|format(opt_stats.best_option.strike) }} {{ opt_stats.best_option.option_type }}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px; color:var(--green);">+{{ opt_stats.best_option.pct_return }}%</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+        Entry: ${{ "%.2f"|format(opt_stats.best_option.entry_price) }} → Now: ${{ "%.2f"|format(opt_stats.best_option.current_price or opt_stats.best_option.entry_price) }} · Exp {{ opt_stats.best_option.expiry }}
+      </div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-left:3px solid var(--red); border-radius:12px; padding:18px;">
+      <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Worst Option</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">{{ opt_stats.worst_option.ticker }}</span>
+          <span style="color:var(--red); font-size:12px; margin-left:6px;">${{ "%.0f"|format(opt_stats.worst_option.strike) }} {{ opt_stats.worst_option.option_type }}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px; color:var(--red);">{{ opt_stats.worst_option.pct_return }}%</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+        Entry: ${{ "%.2f"|format(opt_stats.worst_option.entry_price) }} → Now: ${{ "%.2f"|format(opt_stats.worst_option.current_price or opt_stats.worst_option.entry_price) }} · Exp {{ opt_stats.worst_option.expiry }}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ─── Active Options ──────────────────────────────────────────────────── -->
+  {% if opt_stats.active_options %}
+  <div class="dash-section" style="margin-bottom:28px;">
+    <h2 class="section-title">Active Options <span style="font-size:13px; color:var(--text-dim); font-weight:400;">(currently in Top 8)</span></h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; margin-top:12px;">
+      {% for o in opt_stats.active_options %}
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid {% if o.option_type == 'CALL' %}var(--green){% else %}var(--red){% endif %}; transition:border-color 0.2s;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">{{ o.ticker }}</span>
+            <span style="font-size:12px; color:{% if o.option_type == 'CALL' %}var(--green){% else %}var(--red){% endif %}; margin-left:6px; font-weight:700;">${{ "%.0f"|format(o.strike) }} {{ o.option_type }}</span>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px; color:{% if o.pct_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            {% if o.pct_return >= 0 %}+{% endif %}{{ o.pct_return }}%
+          </span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim);">
+          <span>Entry: ${{ "%.2f"|format(o.entry_price) }}</span>
+          <span>Now: ${{ "%.2f"|format(o.current_price or o.entry_price) }}</span>
+          <span>Peak: {% if o.peak_return %}+{{ o.peak_return }}%{% else %}—{% endif %}</span>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
+          <span style="font-size:9px; background:{% if o.option_type == 'CALL' %}rgba(0,212,170,0.1){% else %}rgba(255,71,87,0.1){% endif %}; color:{% if o.option_type == 'CALL' %}var(--green){% else %}var(--red){% endif %}; padding:2px 8px; border-radius:6px; font-weight:600;">{{ o.option_type }}</span>
+          {% if o.iv %}
+          <span style="font-size:9px; background:rgba(74,158,255,0.1); color:var(--blue); padding:2px 8px; border-radius:6px; font-weight:600;">IV {{ "%.0f"|format(o.iv) }}%</span>
+          {% endif %}
+          <span style="font-size:9px; background:rgba(255,255,255,0.05); color:var(--text-dim); padding:2px 8px; border-radius:6px;">Exp {{ o.expiry }}</span>
+          <span style="font-size:9px; background:rgba(255,255,255,0.05); color:var(--text-dim); padding:2px 8px; border-radius:6px;">Picked {{ o.picked_date }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ─── Closed Options (History) ─────────────────────────────────────── -->
+  {% if opt_stats.closed_options %}
+  <div class="dash-section">
+    <h2 class="section-title">Closed Options <span style="font-size:13px; color:var(--text-dim); font-weight:400;">(dropped from Top 8 or expired)</span></h2>
+    <div style="margin-top:12px;">
+      {% for o in opt_stats.closed_options %}
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--bg2); border:1px solid var(--card-border); border-radius:8px; margin-bottom:6px; border-left:3px solid {% if o.closed_return and o.closed_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; min-width:55px;">{{ o.ticker }}</span>
+          <span style="font-size:12px; color:{% if o.option_type == 'CALL' %}var(--green){% else %}var(--red){% endif %}; font-weight:600;">${{ "%.0f"|format(o.strike) }} {{ o.option_type }}</span>
+          <span style="font-size:11px; color:var(--text-dim);">exp {{ o.expiry }}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-size:11px; color:var(--text-dim);">
+            ${{ "%.2f"|format(o.entry_price) }} → ${{ "%.2f"|format(o.closed_price or o.current_price or o.entry_price) }}
+          </span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; min-width:70px; text-align:right; color:{% if o.closed_return and o.closed_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            {% if o.closed_return and o.closed_return >= 0 %}+{% endif %}{{ o.closed_return or o.pct_return }}%
+          </span>
+          <span style="font-size:10px; color:var(--text-dim); min-width:80px; text-align:right;">{{ o.picked_date }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ─── Empty State (Options) ──────────────────────────────────────────── -->
+  {% if opt_stats.total_options == 0 %}
+  <div style="text-align:center; padding:64px; color:var(--text-dim);">
+    <div style="font-size:3rem; margin-bottom:16px;">📈</div>
+    <h3 style="color:var(--text); margin-bottom:8px;">Options tracking has started</h3>
+    <p>Every call and put from our Top 8 picks is being recorded with entry prices. Check back soon to see returns.</p>
+  </div>
+  {% endif %}
+
+  </div><!-- end sectionOptions -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!--  TRENDING WATCHLIST TRACK RECORD                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="sectionTrending" style="display:none;">
+
+  <!-- ─── Trending Stats Cards ────────────────────────────────────────────── -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:12px; margin-bottom:32px;">
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Total Tracked</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--text);">{{ trend_stats.total_tracked }}</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Win Rate</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:{% if trend_stats.win_rate >= 50 %}var(--green){% else %}var(--red){% endif %};">{{ trend_stats.win_rate }}%</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Avg Return</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:{% if trend_stats.avg_return >= 0 %}var(--green){% else %}var(--red){% endif %};">{% if trend_stats.avg_return >= 0 %}+{% endif %}{{ trend_stats.avg_return }}%</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Winners</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--green);">{{ trend_stats.winners }}</div>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:18px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Losers</div>
+      <div style="font-size:28px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--red);">{{ trend_stats.losers }}</div>
+    </div>
+  </div>
+
+  <!-- ─── Best / Worst Trending ───────────────────────────────────────────── -->
+  {% if trend_stats.best_trending %}
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:32px;">
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-left:3px solid var(--green); border-radius:12px; padding:18px;">
+      <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Best Trending Pick</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px;">{{ trend_stats.best_trending.ticker }}</span>
+          <span style="color:var(--text-dim); font-size:12px; margin-left:6px;">{{ trend_stats.best_trending.conviction_label }}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px; color:var(--green);">+{{ trend_stats.best_trending.pct_return }}%</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+        Entry: ${{ "%.2f"|format(trend_stats.best_trending.price or 0) }} → Now: ${{ "%.2f"|format(trend_stats.best_trending.current_price or trend_stats.best_trending.price or 0) }} · Spotted {{ trend_stats.best_trending.picked_date }}
+      </div>
+    </div>
+    {% if trend_stats.worst_trending %}
+    <div style="background:var(--bg2); border:1px solid var(--card-border); border-left:3px solid var(--red); border-radius:12px; padding:18px;">
+      <div style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Worst Trending Pick</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px;">{{ trend_stats.worst_trending.ticker }}</span>
+          <span style="color:var(--text-dim); font-size:12px; margin-left:6px;">{{ trend_stats.worst_trending.conviction_label }}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:20px; color:var(--red);">{{ trend_stats.worst_trending.pct_return }}%</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+        Entry: ${{ "%.2f"|format(trend_stats.worst_trending.price or 0) }} → Now: ${{ "%.2f"|format(trend_stats.worst_trending.current_price or trend_stats.worst_trending.price or 0) }} · Spotted {{ trend_stats.worst_trending.picked_date }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ─── Active Trending ─────────────────────────────────────────────────── -->
+  {% if trend_stats.active_trending %}
+  <div class="dash-section" style="margin-bottom:28px;">
+    <h2 class="section-title">Active Trending <span style="font-size:13px; color:var(--text-dim); font-weight:400;">(currently on watchlist)</span></h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; margin-top:12px;">
+      {% for t in trend_stats.active_trending %}
+      <a href="{{ url_for('stock_detail', ticker=t.ticker) }}" style="text-decoration:none;">
+      <div style="background:var(--bg2); border:1px solid var(--card-border); border-radius:12px; padding:16px; border-left:3px solid {% if t.pct_return >= 0 %}var(--green){% else %}var(--red){% endif %}; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--card-border)'">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px;">{{ t.ticker }}</span>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:800; font-size:18px; color:{% if t.pct_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            {% if t.pct_return >= 0 %}+{% endif %}{{ t.pct_return }}%
+          </span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim);">
+          <span>Entry: ${{ "%.2f"|format(t.price or 0) }}</span>
+          <span>Now: ${{ "%.2f"|format(t.current_price or t.price or 0) }}</span>
+          <span>Peak: {% if t.peak_return %}+{{ t.peak_return }}%{% else %}—{% endif %}</span>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">
+          <span style="font-size:9px; background:{% if t.conviction_label == 'EXTREME' %}rgba(255,71,87,0.1){% elif t.conviction_label == 'HIGH' %}rgba(0,212,170,0.1){% elif t.conviction_label == 'MEDIUM' %}rgba(255,193,7,0.1){% else %}rgba(255,255,255,0.05){% endif %}; color:{% if t.conviction_label == 'EXTREME' %}var(--red){% elif t.conviction_label == 'HIGH' %}var(--green){% elif t.conviction_label == 'MEDIUM' %}var(--yellow){% else %}var(--text-dim){% endif %}; padding:2px 8px; border-radius:6px; font-weight:600;">{{ t.conviction_score }}/100 {{ t.conviction_label }}</span>
+          <span style="font-size:9px; background:rgba(74,158,255,0.1); color:var(--blue); padding:2px 8px; border-radius:6px; font-weight:600;">{{ t.source_count }} source{{ 's' if t.source_count and t.source_count > 1 }}</span>
+          <span style="font-size:9px; background:rgba(255,255,255,0.05); color:var(--text-dim); padding:2px 8px; border-radius:6px;">Spotted {{ t.picked_date }}</span>
+        </div>
+      </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ─── Closed Trending (History) ───────────────────────────────────────── -->
+  {% if trend_stats.closed_trending %}
+  <div class="dash-section">
+    <h2 class="section-title">Closed Trending <span style="font-size:13px; color:var(--text-dim); font-weight:400;">(dropped from watchlist)</span></h2>
+    <div style="margin-top:12px;">
+      {% for t in trend_stats.closed_trending %}
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--bg2); border:1px solid var(--card-border); border-radius:8px; margin-bottom:6px; border-left:3px solid {% if t.closed_return and t.closed_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; min-width:55px;">{{ t.ticker }}</span>
+          <span style="font-size:12px; color:var(--text-dim);">{{ t.conviction_label }}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <span style="font-size:11px; color:var(--text-dim);">
+            ${{ "%.2f"|format(t.price or 0) }} → ${{ "%.2f"|format(t.closed_price or t.current_price or t.price or 0) }}
+          </span>
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; min-width:70px; text-align:right; color:{% if t.closed_return and t.closed_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            {% if t.closed_return and t.closed_return >= 0 %}+{% endif %}{{ t.closed_return or t.pct_return }}%
+          </span>
+          <span style="font-size:10px; color:var(--text-dim); min-width:80px; text-align:right;">{{ t.picked_date }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ─── Empty State (Trending) ──────────────────────────────────────────── -->
+  {% if trend_stats.total_tracked == 0 %}
+  <div style="text-align:center; padding:64px; color:var(--text-dim);">
+    <div style="font-size:3rem; margin-bottom:16px;">🔥</div>
+    <h3 style="color:var(--text); margin-bottom:8px;">Trending watchlist tracking has started</h3>
+    <p>Every ticker from our multi-source trending watchlist is being recorded. Check back soon to see returns.</p>
+  </div>
+  {% endif %}
+
+  </div><!-- end sectionTrending -->
+
 </div>
+
+<script>
+function showSection(section) {
+  var sections = ['stocks', 'options', 'trending'];
+  sections.forEach(function(s) {
+    var div = document.getElementById('section' + s.charAt(0).toUpperCase() + s.slice(1));
+    var btn = document.getElementById('btn' + s.charAt(0).toUpperCase() + s.slice(1));
+    if (div) div.style.display = (s === section) ? 'block' : 'none';
+    if (btn) btn.classList.toggle('active', s === section);
+  });
+}
+</script>
 {% endblock %}
