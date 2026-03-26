@@ -20,7 +20,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
 import cache
 import data_fetcher
-from models import db, User
+from models import db, User, PickSnapshot
 try:
     from market_scraper import get_enriched_ticker_profile, get_cboe_pc_ratio
 except ImportError:
@@ -539,6 +539,39 @@ def demo_access():
         db.session.commit()
     login_user(user)
     return redirect(url_for("dashboard"))
+
+# ─── Performance Tracker ─────────────────────────────────────────────────
+
+@app.route("/performance")
+@login_required
+def performance():
+    if not current_user.is_subscribed:
+        return redirect(url_for("pricing"))
+    from pick_tracker import get_performance_stats
+    stats = get_performance_stats(PickSnapshot)
+    return render_template("performance.html", stats=stats)
+
+@app.route("/api/performance")
+@login_required
+def api_performance():
+    if not current_user.is_subscribed:
+        return jsonify({"error": "Subscription required"}), 403
+    from pick_tracker import get_performance_stats
+    stats = get_performance_stats(PickSnapshot)
+    return jsonify({
+        "total_picks": stats["total_picks"],
+        "win_rate": stats["win_rate"],
+        "avg_return": stats["avg_return"],
+        "winners": stats["winners"],
+        "losers": stats["losers"],
+        "active_picks": [
+            {"ticker": p.ticker, "company": p.company, "entry_price": p.entry_price,
+             "current_price": p.current_price, "pct_return": p.pct_return,
+             "peak_return": p.peak_return, "score": p.score, "conviction": p.conviction,
+             "picked_date": str(p.picked_date)}
+            for p in stats["active_picks"]
+        ],
+    })
 
 # ─── Stocks Browser ──────────────────────────────────────────────────────────
 

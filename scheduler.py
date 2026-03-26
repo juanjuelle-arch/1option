@@ -14,6 +14,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
 def refresh_main():
     """Refresh core dashboard data — market, sentiment, news, earnings. Runs every 2 min."""
     logger.info("Refreshing main cache...")
@@ -43,8 +44,59 @@ def refresh_picks():
         picks = data_fetcher.get_top_picks(earnings)
         cache.set("picks", picks)
         logger.info(f"Picks cached: {len(picks)} picks")
+
+        # Snapshot picks for performance tracking
+        _snapshot_picks(picks)
+
     except Exception as e:
         logger.error(f"Picks refresh error: {e}")
+
+
+def _snapshot_picks(picks):
+    """Save pick snapshots to database for performance tracking."""
+    try:
+        from flask import current_app
+        from models import db, PickSnapshot
+        from pick_tracker import snapshot_picks
+
+        # Only run if we have a Flask app context
+        if current_app:
+            snapshot_picks(picks, db, PickSnapshot)
+    except RuntimeError:
+        # No app context (running outside Flask) — try creating one
+        try:
+            from app import app
+            from models import db, PickSnapshot
+            from pick_tracker import snapshot_picks
+            with app.app_context():
+                snapshot_picks(picks, db, PickSnapshot)
+        except Exception as e:
+            logger.debug(f"Pick snapshot skipped (no app context): {e}")
+    except Exception as e:
+        logger.warning(f"Pick snapshot error: {e}")
+
+
+def refresh_pick_prices():
+    """Update current prices for all tracked picks. Runs every 15 min."""
+    logger.info("Updating tracked pick prices...")
+    try:
+        from flask import current_app
+        from models import db, PickSnapshot
+        from pick_tracker import update_pick_prices
+
+        if current_app:
+            update_pick_prices(db, PickSnapshot)
+    except RuntimeError:
+        try:
+            from app import app
+            from models import db, PickSnapshot
+            from pick_tracker import update_pick_prices
+            with app.app_context():
+                update_pick_prices(db, PickSnapshot)
+        except Exception as e:
+            logger.debug(f"Pick price update skipped: {e}")
+    except Exception as e:
+        logger.warning(f"Pick price update error: {e}")
 
 
 def refresh_options():
@@ -98,10 +150,13 @@ def start_scheduler():
     scheduler.add_job(refresh_trending, "interval", minutes=5, id="refresh_trending",
                       next_run_time=None)
 
+    # Pick price updates — every 15 min
+    scheduler.add_job(refresh_pick_prices, "interval", minutes=15, id="refresh_pick_prices")
+
     # Stock browser — every 30 min (5300+ tickers takes time to download)
     scheduler.add_job(refresh_stocks, "interval", minutes=30, id="refresh_stocks")
 
-    # H-10: Staggered startup — spread jobs to avoid rate limit storm on cold boot
+    # Staggered startup
     now = datetime.now()
     scheduler.add_job(refresh_picks, "date",
                       run_date=now + timedelta(seconds=5),
@@ -117,5 +172,5 @@ def start_scheduler():
                       id="refresh_trending_startup")
 
     scheduler.start()
-    logger.info("Scheduler started — main/2min, picks+options+trending/5min, stocks/30min")
+    logger.info("Scheduler started — main/2min, picks+options+trending/5min, pick-prices/15min, stocks/30min")
     return scheduler

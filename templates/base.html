@@ -56,6 +56,7 @@
       <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
       {% if current_user.is_subscribed %}
       <a href="{{ url_for('stocks') }}" class="{% if request.endpoint in ('stocks', 'stock_detail') %}active{% endif %}">Stocks</a>
+      <a href="{{ url_for('performance') }}" class="{% if request.endpoint == 'performance' %}active{% endif %}">Track Record</a>
       {% endif %}
       <span class="nav-user">{{ current_user.name }}</span>
       <a href="{{ url_for('logout') }}" class="btn btn-ghost">Logout</a>
