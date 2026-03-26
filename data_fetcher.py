@@ -1553,10 +1553,12 @@ BEARISH_KEYWORDS = ["plunge", "crash", "sell", "downgrade", "bearish", "miss",
 
 def scan_news_for_ticker(ticker, articles):
     """Return news sentiment for a ticker based on recent headlines."""
+    import re
+    ticker_pattern = re.compile(r'\b' + re.escape(ticker) + r'\b', re.IGNORECASE)
     matches = []
     for a in articles:
         title_lower = (a["title"] + " " + a.get("summary", "")).lower()
-        if ticker.lower() in title_lower or ticker.lower() + " " in title_lower:
+        if ticker_pattern.search(title_lower):
             bull = sum(1 for kw in BULLISH_KEYWORDS if kw in title_lower)
             bear = sum(1 for kw in BEARISH_KEYWORDS if kw in title_lower)
             matches.append({"title": a["title"], "source": a["source"], "bull": bull, "bear": bear})

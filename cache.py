@@ -60,6 +60,12 @@ def get(key):
         entry = _mem_cache.get(key)
         if entry is None:
             return None
+        # Check TTL for in-memory cache
+        ttl = entry.get("ttl", DEFAULT_TTL)
+        age = (datetime.now(timezone.utc) - entry["updated_at"]).total_seconds()
+        if age > ttl:
+            del _mem_cache[key]
+            return None
         return entry["data"]
 
 
@@ -78,6 +84,7 @@ def set(key, data, ttl=DEFAULT_TTL):
         _mem_cache[key] = {
             "data": data,
             "updated_at": datetime.now(timezone.utc),
+            "ttl": ttl,
         }
 
 

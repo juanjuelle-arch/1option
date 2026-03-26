@@ -4,10 +4,8 @@ Allow: /pricing
 Disallow: /dashboard
 Disallow: /stocks
 Disallow: /api/
-Disallow: /dev-activate
 Disallow: /demo-access
 Disallow: /webhook
 Disallow: /create-checkout-session
 Disallow: /payment-success
 
-Sitemap: https://web-production-7b4fe.up.railway.app/sitemap.xml

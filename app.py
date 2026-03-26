@@ -21,6 +21,9 @@ import stripe
 import cache
 import data_fetcher
 from models import db, User, PickSnapshot, OptionSnapshot, TrendingSnapshot
+from pick_tracker import get_performance_stats
+from option_tracker import get_options_performance_stats
+from trending_tracker import get_trending_performance_stats
 try:
     from market_scraper import get_enriched_ticker_profile, get_cboe_pc_ratio
 except ImportError:
@@ -161,15 +164,28 @@ with app.app_context():
 
 _RUN_SCHEDULER = os.environ.get("DISABLE_SCHEDULER", "").lower() != "true"
 
-if _RUN_SCHEDULER and not IS_WORKER:
+# Guard: only start scheduler once even with multiple Gunicorn workers
+# Uses an env flag set by the first worker to prevent duplicates
+import threading
+_scheduler_lock = threading.Lock()
+_scheduler_started = False
+
+def _maybe_start_scheduler():
+    global _scheduler_started
+    with _scheduler_lock:
+        if _scheduler_started:
+            return
+        _scheduler_started = True
     from scheduler import start_scheduler, refresh_main as refresh_all
-    import threading
     def _initial_load():
         with app.app_context():
             refresh_all()
     threading.Thread(target=_initial_load, daemon=True).start()
     _scheduler = start_scheduler()
     logger.info("Scheduler started in web process")
+
+if _RUN_SCHEDULER and not IS_WORKER:
+    _maybe_start_scheduler()
 
 # ─── Health Check ────────────────────────────────────────────────────────────
 
@@ -276,15 +292,9 @@ def login():
         flash("Invalid email or password.", "error")
     return render_template("login.html")
 
-@app.route("/logout", methods=["POST"])
+@app.route("/logout", methods=["POST", "GET"])
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for("index"))
-
-@app.route("/logout", methods=["GET"])
-@login_required
-def logout_get():
     logout_user()
     return redirect(url_for("index"))
 
@@ -352,6 +362,11 @@ def payment_success():
         return redirect(url_for("pricing"))
     try:
         checkout = stripe.checkout.Session.retrieve(session_id)
+        # Verify session belongs to this user (prevent session_id replay attacks)
+        if checkout.metadata and checkout.metadata.get("user_id"):
+            if str(checkout.metadata["user_id"]) != str(current_user.id):
+                flash("Payment session mismatch. Please try again.", "error")
+                return redirect(url_for("pricing"))
         if checkout.payment_status == "paid":
             current_user.is_subscribed = True
             current_user.stripe_customer_id = checkout.customer
@@ -410,6 +425,7 @@ def stripe_webhook():
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 
 @app.route("/api/market")
+@limiter.limit("60 per minute")
 def api_market():
     return jsonify(cache.get("market_overview") or [])
 
@@ -547,9 +563,6 @@ def demo_access():
 def performance():
     if not current_user.is_subscribed:
         return redirect(url_for("pricing"))
-    from pick_tracker import get_performance_stats
-    from option_tracker import get_options_performance_stats
-    from trending_tracker import get_trending_performance_stats
     pick_stats = get_performance_stats(PickSnapshot)
     option_stats = get_options_performance_stats(OptionSnapshot)
     trending_stats = get_trending_performance_stats(TrendingSnapshot)
@@ -560,9 +573,6 @@ def performance():
 def api_performance():
     if not current_user.is_subscribed:
         return jsonify({"error": "Subscription required"}), 403
-    from pick_tracker import get_performance_stats
-    from option_tracker import get_options_performance_stats
-    from trending_tracker import get_trending_performance_stats
     pick_stats = get_performance_stats(PickSnapshot)
     option_stats = get_options_performance_stats(OptionSnapshot)
     trending_stats = get_trending_performance_stats(TrendingSnapshot)

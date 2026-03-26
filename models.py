@@ -41,6 +41,7 @@ class PickSnapshot(db.Model):
     __tablename__ = "pick_snapshots"
     __table_args__ = (
         db.Index('ix_pick_ticker_date', 'ticker', 'picked_date'),
+        db.Index('ix_pick_active', 'is_active'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -93,6 +94,7 @@ class OptionSnapshot(db.Model):
     __tablename__ = "option_snapshots"
     __table_args__ = (
         db.Index('ix_opt_ticker_strike_date', 'ticker', 'strike', 'expiry', 'option_type', 'picked_date'),
+        db.Index('ix_opt_active', 'is_active'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -147,6 +149,7 @@ class TrendingSnapshot(db.Model):
     __tablename__ = "trending_snapshots"
     __table_args__ = (
         db.Index('ix_trending_ticker_date', 'ticker', 'picked_date'),
+        db.Index('ix_trending_active', 'is_active'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
