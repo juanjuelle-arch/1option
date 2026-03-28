@@ -60,6 +60,16 @@ _db_url = os.environ.get("DATABASE_URL", "sqlite:///1option.db")
 # Railway PostgreSQL uses postgres:// but SQLAlchemy requires postgresql://
 if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+
+# Verify PostgreSQL driver is available, fallback to SQLite
+if "postgresql" in _db_url:
+    try:
+        import psycopg2  # noqa: F401
+        logger.info("Database: PostgreSQL configured")
+    except ImportError:
+        logger.warning("Database: psycopg2 not installed, falling back to SQLite")
+        _db_url = "sqlite:///1option.db"
+
 app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -89,7 +99,15 @@ csrf = CSRFProtect(app)
 
 # Rate limiting — Redis-backed in production, memory locally
 _redis_url = os.environ.get("REDIS_URL", "")
-_limiter_storage = _redis_url if _redis_url else "memory://"
+_limiter_storage = "memory://"
+if _redis_url:
+    try:
+        import redis as _redis_check
+        _redis_check.from_url(_redis_url).ping()
+        _limiter_storage = _redis_url
+        logger.info("Rate limiter: using Redis")
+    except Exception:
+        logger.warning("Rate limiter: Redis unavailable, using memory")
 
 limiter = Limiter(
     app=app,
