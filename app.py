@@ -97,17 +97,8 @@ if IS_PRODUCTION:
 # CSRF protection
 csrf = CSRFProtect(app)
 
-# Rate limiting — Redis-backed in production, memory locally
+# Rate limiting — always use memory (safest for startup)
 _redis_url = os.environ.get("REDIS_URL", "")
-_limiter_storage = "memory://"
-if _redis_url:
-    try:
-        import redis as _redis_check
-        _redis_check.from_url(_redis_url).ping()
-        _limiter_storage = _redis_url
-        logger.info("Rate limiter: using Redis")
-    except Exception:
-        logger.warning("Rate limiter: Redis unavailable, using memory")
 
 limiter = Limiter(
     app=app,
@@ -192,17 +183,20 @@ with app.app_context():
 _RUN_SCHEDULER = os.environ.get("DISABLE_SCHEDULER", "").lower() != "true"
 
 if _RUN_SCHEDULER and not IS_WORKER:
-    import threading
-    from scheduler import start_scheduler, refresh_main as refresh_all
-    def _initial_load():
-        with app.app_context():
-            try:
-                refresh_all()
-            except Exception as e:
-                logger.error(f"Initial data load failed: {e}")
-    threading.Thread(target=_initial_load, daemon=True).start()
-    _scheduler = start_scheduler()
-    logger.info("Scheduler started in web process")
+    try:
+        import threading
+        from scheduler import start_scheduler, refresh_main as refresh_all
+        def _initial_load():
+            with app.app_context():
+                try:
+                    refresh_all()
+                except Exception as e:
+                    logger.error(f"Initial data load failed: {e}")
+        threading.Thread(target=_initial_load, daemon=True).start()
+        _scheduler = start_scheduler()
+        logger.info("Scheduler started in web process")
+    except Exception as e:
+        logger.error(f"Scheduler failed to start: {e}")
 
 # ─── Health Check ────────────────────────────────────────────────────────────
 
