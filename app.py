@@ -176,34 +176,33 @@ def load_user(user_id):
 # ─── Init DB ────────────────────────────────────────────────────────────────
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        logger.info(f"Database initialized: {app.config['SQLALCHEMY_DATABASE_URI'][:20]}...")
+    except Exception as e:
+        logger.error(f"Database init failed: {e}")
+        # Fallback to SQLite if PostgreSQL fails
+        if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
+            logger.warning("Falling back to SQLite")
+            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///1option.db"
+            db.create_all()
 
 # ─── Scheduler: only run in web process if no separate worker ────────────────
 
 _RUN_SCHEDULER = os.environ.get("DISABLE_SCHEDULER", "").lower() != "true"
 
-# Guard: only start scheduler once even with multiple Gunicorn workers
-# Uses an env flag set by the first worker to prevent duplicates
-import threading
-_scheduler_lock = threading.Lock()
-_scheduler_started = False
-
-def _maybe_start_scheduler():
-    global _scheduler_started
-    with _scheduler_lock:
-        if _scheduler_started:
-            return
-        _scheduler_started = True
+if _RUN_SCHEDULER and not IS_WORKER:
+    import threading
     from scheduler import start_scheduler, refresh_main as refresh_all
     def _initial_load():
         with app.app_context():
-            refresh_all()
+            try:
+                refresh_all()
+            except Exception as e:
+                logger.error(f"Initial data load failed: {e}")
     threading.Thread(target=_initial_load, daemon=True).start()
     _scheduler = start_scheduler()
     logger.info("Scheduler started in web process")
-
-if _RUN_SCHEDULER and not IS_WORKER:
-    _maybe_start_scheduler()
 
 # ─── Health Check ────────────────────────────────────────────────────────────
 
