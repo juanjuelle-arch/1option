@@ -61,13 +61,17 @@ _db_url = os.environ.get("DATABASE_URL", "sqlite:///1option.db")
 if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
 
-# Verify PostgreSQL driver is available, fallback to SQLite
+# Verify PostgreSQL driver AND connection, fallback to SQLite
 if "postgresql" in _db_url:
     try:
-        import psycopg2  # noqa: F401
-        logger.info("Database: PostgreSQL configured")
-    except ImportError:
-        logger.warning("Database: psycopg2 not installed, falling back to SQLite")
+        import psycopg2
+        # Test actual connection before committing to PostgreSQL
+        _test_conn = psycopg2.connect(_db_url.replace("postgresql://", "postgres://", 1),
+                                       connect_timeout=5)
+        _test_conn.close()
+        logger.info("Database: PostgreSQL connected")
+    except Exception as e:
+        logger.warning(f"Database: PostgreSQL unavailable ({e}), falling back to SQLite")
         _db_url = "sqlite:///1option.db"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
@@ -172,15 +176,7 @@ with app.app_context():
         logger.info(f"Database initialized: {app.config['SQLALCHEMY_DATABASE_URI'][:20]}...")
     except Exception as e:
         logger.error(f"Database init failed: {e}")
-        # Fallback to SQLite if PostgreSQL fails — must dispose old engine
-        if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
-            logger.warning("Falling back to SQLite")
-            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///1option.db"
-            app.config.pop("SQLALCHEMY_ENGINE_OPTIONS", None)
-            db.engine.dispose()
-            db.init_app(app)
-            db.create_all()
-            logger.info("SQLite fallback initialized successfully")
+        logger.warning("App will start but database features may not work")
 
 # ─── Scheduler: only run in web process if no separate worker ────────────────
 
