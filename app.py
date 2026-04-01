@@ -104,7 +104,7 @@ limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "60 per hour"],
-    storage_uri=_limiter_storage,
+    storage_uri=_redis_url if _redis_url else "memory://",
 )
 
 # Ticker validation
