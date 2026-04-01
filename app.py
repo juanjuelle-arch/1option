@@ -172,11 +172,15 @@ with app.app_context():
         logger.info(f"Database initialized: {app.config['SQLALCHEMY_DATABASE_URI'][:20]}...")
     except Exception as e:
         logger.error(f"Database init failed: {e}")
-        # Fallback to SQLite if PostgreSQL fails
+        # Fallback to SQLite if PostgreSQL fails — must dispose old engine
         if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
             logger.warning("Falling back to SQLite")
             app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///1option.db"
+            app.config.pop("SQLALCHEMY_ENGINE_OPTIONS", None)
+            db.engine.dispose()
+            db.init_app(app)
             db.create_all()
+            logger.info("SQLite fallback initialized successfully")
 
 # ─── Scheduler: only run in web process if no separate worker ────────────────
 
