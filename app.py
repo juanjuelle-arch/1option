@@ -230,7 +230,7 @@ def inject_market():
 def index():
     picks = cache.get("picks") or []
     news = cache.get("news") or []
-    sentiment = cache.get("sentiment") or {}
+    sentiment = cache.get("sentiment") or None
     return render_template("index.html",
                            picks=picks[:3],
                            news=news[:3],
@@ -319,7 +319,7 @@ def dashboard():
         return redirect(url_for("pricing"))
     picks = cache.get("picks") or []
     news = cache.get("news") or []
-    sentiment = cache.get("sentiment") or {}
+    sentiment = cache.get("sentiment") or None
     earnings = cache.get("earnings") or []
     top_calls = cache.get("top_calls") or []
     top_puts = cache.get("top_puts") or []
