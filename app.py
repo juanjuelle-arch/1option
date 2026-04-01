@@ -101,14 +101,24 @@ if IS_PRODUCTION:
 # CSRF protection
 csrf = CSRFProtect(app)
 
-# Rate limiting — always use memory (safest for startup)
+# Rate limiting — test Redis before using it, fall back to memory
 _redis_url = os.environ.get("REDIS_URL", "")
+_limiter_storage = "memory://"
+if _redis_url:
+    try:
+        import redis as _redis_mod
+        _test_redis = _redis_mod.from_url(_redis_url, socket_connect_timeout=3)
+        _test_redis.ping()
+        _limiter_storage = _redis_url
+        logger.info("Rate limiter: using Redis")
+    except Exception as e:
+        logger.warning(f"Rate limiter: Redis unavailable ({e}), using memory")
 
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "60 per hour"],
-    storage_uri=_redis_url if _redis_url else "memory://",
+    storage_uri=_limiter_storage,
 )
 
 # Ticker validation
@@ -228,18 +238,14 @@ def inject_market():
 
 @app.route("/")
 def index():
-    try:
-        picks = cache.get("picks") or []
-        news = cache.get("news") or []
-        sentiment = cache.get("sentiment") or None
-        return render_template("index.html",
-                               picks=picks[:3],
-                               news=news[:3],
-                               sentiment=sentiment,
-                               updated_at=cache.get_updated_at("picks"))
-    except Exception as e:
-        logger.error(f"Index route error: {e}", exc_info=True)
-        return f"<h1>Debug Error</h1><pre>{e}</pre>", 500
+    picks = cache.get("picks") or []
+    news = cache.get("news") or []
+    sentiment = cache.get("sentiment") or None
+    return render_template("index.html",
+                           picks=picks[:3],
+                           news=news[:3],
+                           sentiment=sentiment,
+                           updated_at=cache.get_updated_at("picks"))
 
 @app.route("/pricing")
 def pricing():
