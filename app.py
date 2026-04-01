@@ -228,14 +228,18 @@ def inject_market():
 
 @app.route("/")
 def index():
-    picks = cache.get("picks") or []
-    news = cache.get("news") or []
-    sentiment = cache.get("sentiment") or None
-    return render_template("index.html",
-                           picks=picks[:3],
-                           news=news[:3],
-                           sentiment=sentiment,
-                           updated_at=cache.get_updated_at("picks"))
+    try:
+        picks = cache.get("picks") or []
+        news = cache.get("news") or []
+        sentiment = cache.get("sentiment") or None
+        return render_template("index.html",
+                               picks=picks[:3],
+                               news=news[:3],
+                               sentiment=sentiment,
+                               updated_at=cache.get_updated_at("picks"))
+    except Exception as e:
+        logger.error(f"Index route error: {e}", exc_info=True)
+        return f"<h1>Debug Error</h1><pre>{e}</pre>", 500
 
 @app.route("/pricing")
 def pricing():
